@@ -1,0 +1,47 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "survey-currents"
+version = "0.1.0"
+description = "Surface-current and water-temperature acquisition engine for surveying and remote sensing: NOAA Operational Forecast Systems (anonymous S3) and Copernicus Marine Service fields as a canonical CurrentField model with COG export and provenance"
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "MIT" }
+authors = [{ name = "crieck2010" }]
+keywords = ["surveying", "remote-sensing", "ocean-currents", "noaa", "glofs", "copernicus", "cmems", "water-temperature", "flow-field"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Intended Audience :: Science/Research",
+    "Topic :: Scientific/Engineering",
+    "Topic :: Scientific/Engineering :: GIS",
+]
+# The engine core is stdlib+numpy on purpose. NetCDF parsing needs
+# xarray/netCDF4; anonymous S3 download works with the stdlib (urllib) and
+# only uses boto3 when installed; CMEMS needs the copernicusmarine toolbox;
+# GeoTIFF/COG export needs rasterio.
+dependencies = ["numpy>=1.22"]
+
+[project.optional-dependencies]
+noaa = ["xarray>=2023.1", "netCDF4>=1.6"]
+s3 = ["boto3>=1.26"]
+cmems = ["copernicusmarine>=2.0"]
+raster = ["rasterio>=1.3"]
+full = ["xarray>=2023.1", "netCDF4>=1.6", "boto3>=1.26", "copernicusmarine>=2.0", "rasterio>=1.3"]
+dev = ["build", "twine", "pytest"]
+
+[project.scripts]
+survey-currents = "currents.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/crieck2010/survey-currents"
+Repository = "https://github.com/crieck2010/survey-currents"
+Issues = "https://github.com/crieck2010/survey-currents/issues"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

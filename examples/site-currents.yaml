@@ -1,0 +1,13 @@
+# Proposed survey-sites `currents:` block (see docs/INTEROP.md).
+# Drop-in sketch for a future site-config schema version — not read by
+# any released survey-sites version yet.
+site_id: lake-michigan-south
+name: "Lake Michigan — south basin currents"
+geometry:
+  bbox: [-87.9, 41.6, -86.7, 42.9]
+currents:
+  source: noaa-ofs
+  ofs_code: LMHOFS
+  cycle: "00"
+  hours: [0, 6, 12, 18]
+  metrics: [speed_mean, temp_mean]

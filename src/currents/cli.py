@@ -92,6 +92,37 @@ def cmd_synthetic(a: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_fetch_glsea_sst(a: argparse.Namespace) -> int:
+    from .glsea import fetch_glsea_sst
+    field = fetch_glsea_sst(_parse_bbox(a.bbox), a.start, a.end,
+                            stride_days=a.stride_days)
+    path = f"{a.out.rstrip('/')}.json"
+    field.to_json(path)
+    print(f"fetched {len(field.times)} daily SST timesteps -> {path}")
+    print(f"source={field.source} bounds={field.bounds}")
+    print(f"sha256={field.provenance['sha256']}")
+    return 0
+
+
+def cmd_fetch_glsea_averages(a: argparse.Namespace) -> int:
+    from .glsea import fetch_glsea_lake_averages
+    series = fetch_glsea_lake_averages(a.lake, a.start, a.end)
+    path = f"{a.out.rstrip('/')}.json"
+    series.to_json(path)
+    print(f"fetched {series.n} daily lake-average temps ({series.lake}) -> {path}")
+    print(f"mean={series.mean():.2f} degC over {series.dates[0]}..{series.dates[-1]}")
+    return 0
+
+
+def cmd_glsea_synthetic(a: argparse.Namespace) -> int:
+    from .glsea import GlseaField
+    field = GlseaField.synthetic(nt=a.nt, seed=a.seed)
+    path = f"{a.out.rstrip('/')}.json"
+    field.to_json(path)
+    print(f"wrote synthetic GLSEA SST field ({len(field.times)} steps) -> {path}")
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="survey-currents",
                                 description="Surface-current / water-temperature acquisition engine")
@@ -133,6 +164,33 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--seed", type=int, default=7)
     s.add_argument("--out", default="synthetic_field", help="output path prefix")
     s.set_defaults(func=cmd_synthetic)
+
+    s = sub.add_parser("fetch-glsea-sst",
+                       help="fetch NOAA GLSEA daily SST grids (needs network)")
+    s.add_argument("--bbox", required=True, help="min_lon,min_lat,max_lon,max_lat "
+                   "(must lie inside the GLSEA lakes-region grid)")
+    s.add_argument("--start", required=True, help="start date YYYY-MM-DD")
+    s.add_argument("--end", required=True, help="end date YYYY-MM-DD")
+    s.add_argument("--stride-days", type=int, default=30,
+                   help="time stride in days (default 30)")
+    s.add_argument("--out", default="glsea_sst", help="output path prefix")
+    s.set_defaults(func=cmd_fetch_glsea_sst)
+
+    s = sub.add_parser("fetch-glsea-averages",
+                       help="fetch NOAA GLSEA lake-average temps (needs network)")
+    s.add_argument("--lake", required=True,
+                   help="superior|michigan|huron|erie|ontario")
+    s.add_argument("--start", required=True, help="start date YYYY-MM-DD")
+    s.add_argument("--end", required=True, help="end date YYYY-MM-DD")
+    s.add_argument("--out", default="glsea_averages", help="output path prefix")
+    s.set_defaults(func=cmd_fetch_glsea_averages)
+
+    s = sub.add_parser("glsea-synthetic",
+                       help="write a deterministic synthetic GLSEA SST field (offline)")
+    s.add_argument("--nt", type=int, default=4)
+    s.add_argument("--seed", type=int, default=7)
+    s.add_argument("--out", default="glsea_synthetic", help="output path prefix")
+    s.set_defaults(func=cmd_glsea_synthetic)
     return p
 
 

@@ -82,10 +82,58 @@ basin-scale reels.
 Resolution 1/12° (~9 km); surface level only. Any other dataset id the
 toolbox recognises can be used via a custom `CmemsPreset`.
 
+## 3. NOAA GLSEA — Great Lakes satellite SST (no account)
+
+Sea Surface Temperature from the Great Lakes Surface Environmental
+Analysis (ACSPO GLSEA), served by NOAA GLERL's ERDDAP. This is
+**satellite-derived analysis** (ACSPO L3S-LEO SST from NPP, NOAA-20,
+MetOp A/B/C), not hydrodynamic model output — the complement to the
+OFS/CMEMS model fields above. Verified live 2026-09-26.
+
+### 3a. Gridded daily SST — `GLSEA_ACSPO_GCS` (griddap)
+
+- Endpoint: `https://apps.glerl.noaa.gov/erddap/griddap/GLSEA_ACSPO_GCS.nc`
+- Variable `sst` (float, °C, `_FillValue` −99999.0 → masked); dims `(time, latitude, longitude)`
+- Daily timesteps stamped **12:00 UTC**; coverage **2006–present**
+- Grid ~0.014° (~1.5 km); the engine samples the time axis with a
+  day-stride (default 30) and full-resolution lat/lon
+
+Request shape (built by `currents.glsea.glsea_sst_url`):
+
+```
+sst[(<start>ISO):<stride>:(<end>ISO)][(<lat_min>):1:(<lat_max>)][(<lon_min>):1:(<lon_max>)]
+```
+
+with ISO like `2016-01-01T12:00:00Z`.
+
+**Grid quirk — the −92.42 longitude floor.** The longitude axis is
+clipped to the lakes region: `actual_range = -92.4199507342304,
+-75.8816402880531` (latitude `38.8749871947297, 50.6059751976539`).
+Any bbox west of the floor raises a clear `ValueError` *before* any
+download (`validate_glsea_bbox`); latitude/longitude constraints must
+be ascending.
+
+### 3b. Lake-average daily temperature — `glsea_avgtemps_3` (tabledap)
+
+- Endpoint: `https://apps.glerl.noaa.gov/erddap/tabledap/glsea_avgtemps_3.csv?Year,Day,<Col>&Year>=<y0>`
+  (`>=` is percent-encoded as `%3E` in the request — raw `>` gets
+  dropped by some proxies)
+- Columns: `Year, Day` (day-of-year), plus `Sup, Mich, Huron, Erie,
+  Ont` — one lake-average SST (°C) per day
+- Parsed with stdlib `csv` only (no netCDF4 needed); the ERDDAP units
+  row and rows with missing temperatures are skipped, and rows are
+  filtered to the requested `[start, end]` window
+- Lake name mapping (`currents.glsea.LAKE_COLUMNS`):
+  `superior→Sup`, `michigan→Mich`, `huron→Huron`, `erie→Erie`,
+  `ontario→Ont`; unknown names raise `ValueError`
+
 ## Choosing a source
 
 - **US Great Lakes / coasts, no signup:** NOAA OFS (LMHOFS for Lake
   Michigan detail, GLOFS basin-wide).
+- **Great Lakes satellite SST, no signup:** NOAA GLSEA — observed
+  analysis rather than model output; pairs with OFS fields for
+  model-vs-satellite temperature comparison.
 - **Any other coastline:** CMEMS global physics.
 - **Blending with satellites:** use `align_to_thermal_zone()` to compare
   model water temperature against survey-thermal Landsat LST passes over

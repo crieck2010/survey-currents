@@ -2,7 +2,7 @@
 
 Surface-current and water-temperature acquisition engine for surveying and remote sensing — the first module of the earthwatch-suite **flow-field animation program** (the pipeline that produces mapped.earth-style animated current/temperature reels).
 
-`survey-currents` pulls hourly current-vector (u/v) and water-temperature fields from **operational hydrodynamic forecast models** — not satellites — into one canonical `CurrentField` model with provenance, COG export, and survey-suite interoperability.
+`survey-currents` pulls hourly current-vector (u/v) and water-temperature fields from **operational hydrodynamic forecast models** — not satellites — into one canonical `CurrentField` model with provenance, COG export, and survey-suite interoperability. Since v0.2.0 it also pulls **satellite-derived daily sea-surface temperature** from NOAA's GLSEA analysis (Great Lakes only) into a companion `GlseaField` model, plus lake-wide average temperature series.
 
 ## Data sources
 
@@ -10,6 +10,8 @@ Surface-current and water-temperature acquisition engine for surveying and remot
 |---|---|---|---|---|
 | NOAA OFS via anonymous AWS S3 (`noaa-ofs-pds`, `noaa-nos-ofs-pds`) | No signup, unsigned requests | US coasts + Great Lakes | 50 m – 5 km | 48–120 h |
 | Copernicus Marine Service (`copernicusmarine` toolbox) | Free account | Global ocean | 1/12° (~9 km) | NRT + forecast |
+| NOAA GLSEA via ERDDAP griddap (`GLSEA_ACSPO_GCS`) | No signup | **Great Lakes only** | ~1.5 km | daily analysis, 2006–present |
+| NOAA GLSEA via ERDDAP tabledap (`glsea_avgtemps_3`) | No signup | Great Lakes (per-lake daily averages) | lake-wide | daily, 2006–present |
 
 Registered NOAA models include **GLOFS** (Great Lakes, 5 km, 60 h), **LMHOFS** (Lake Michigan/Huron, 50 m–2.5 km, 120 h — the source of the Lake Michigan reel), LEOFS, CBOFS, DBOFS, GoMOFS, WCOFS, NGOFS2, SFBOFS, TBOFS, CIOFS, CREOFS, SSCOFS. Full table in `docs/DATA_SOURCES.md`.
 
@@ -63,6 +65,27 @@ nc = subset_cmems("global-physics-daily",
 field = parse_cmems_netcdf(nc)
 ```
 
+GLSEA satellite SST (Great Lakes only — no signup, needs `netCDF4`):
+
+```python
+from currents.glsea import fetch_glsea_sst, fetch_glsea_lake_averages
+
+# Daily SST grids over western Lake Superior, every 30 days in 2025.
+# NOTE: the GLSEA grid is clipped to the lakes region — its longitude
+# floor is exactly -92.4199507342304; requests west of that raise
+# ValueError before any download.
+sst = fetch_glsea_sst(
+    bbox=(-92.0, 46.5, -87.0, 48.0),   # min_lon, min_lat, max_lon, max_lat
+    start="2025-01-01", end="2025-12-31", stride_days=30,
+)
+print(sst.sst.shape)          # (nt, ny, nx) masked array, degC
+print(sst.spatial_mean(0))    # masked/NaN-aware mean SST at step 0
+
+# Lake-wide daily average temperature series (stdlib only, no netCDF4).
+series = fetch_glsea_lake_averages("superior", "2025-01-01", "2025-12-31")
+print(series.n, f"{series.mean():.2f} degC mean")
+```
+
 ## CLI
 
 ```bash
@@ -74,6 +97,11 @@ survey-currents fetch-cmems --preset global-physics-daily \
 survey-currents info lmhofs_data/nos.lmhofs.fields.f000.20260916.t00z.nc
 survey-currents export-cogs field.json --out cogs/
 survey-currents synthetic --nt 24 --out demo_field
+survey-currents fetch-glsea-sst --bbox -92.0,46.5,-87.0,48.0 \
+    --start 2025-01-01 --end 2025-12-31 --stride-days 30 --out superior_sst
+survey-currents fetch-glsea-averages --lake superior \
+    --start 2025-01-01 --end 2025-12-31 --out superior_avg
+survey-currents glsea-synthetic --nt 4 --out glsea_demo
 ```
 
 ## The canonical model
@@ -89,6 +117,14 @@ Everything converges on `CurrentField` (`src/currents/models.py`):
 
 COG band order is the stable interchange contract for **survey-flow** (next module): `speed, u, v, temperature`.
 
+Satellite SST converges on `GlseaField` (`src/currents/glsea.py`):
+
+- `sst`: (nt, ny, nx) numpy masked array, °C — land/missing cells masked
+- `times`: ISO-8601 timestamps (daily, 12:00 UTC); `lats`/`lons`: increasing vectors
+- `spatial_mean()`, `select_time()`, `select_bbox()`, JSON round-trip, `GlseaField.synthetic()`
+- `LakeSeries`: lake-wide daily average temps (dates + temps lists, °C), parsed with stdlib `csv` — no netCDF4 needed
+- Provenance dict carries the exact ERDDAP URL, SHA-256 of the downloaded bytes, and retrieval timestamp
+
 ## Interoperability
 
 - **survey-monitor**: `CurrentsPassProvider` in `currents/interop.py` implements the `PassProvider` interface (`list_passes`/`metrics`) — each forecast hour becomes a monitored pass with `speed_mean`/`u_mean`/`v_mean`/`temp_mean` metrics.
@@ -102,6 +138,7 @@ COG band order is the stable interchange contract for **survey-flow** (next modu
 src/currents/
     models.py      # CurrentField + NOAA OFS registry
     noaa_ofs.py    # anonymous S3 listing/download, NetCDF parsing
+    glsea.py       # NOAA GLSEA satellite SST (griddap) + lake averages (tabledap)
     cmems.py       # copernicusmarine subset wrapper + parser
     convert.py     # per-timestep 4-band GeoTIFF/COG export
     provenance.py  # SHA-256 provenance sidecars
@@ -109,10 +146,13 @@ src/currents/
     cli.py         # thin CLI adapter
 docs/
     ARCHITECTURE.md  DATA_SOURCES.md  INTEROP.md
+examples/
+    glsea_demo.py  # offline GLSEA demo (GlseaField.synthetic only)
 ```
 
 ## Limitations
 
+- **GLSEA is Great Lakes only.** The `GLSEA_ACSPO_GCS` longitude axis is clipped to the lakes region with a minimum of exactly **-92.4199507342304** — bboxes west of that floor (or outside the lat/lon ranges in `docs/DATA_SOURCES.md`) raise a clear `ValueError` before any download. Coverage is daily 2006–present; timesteps are stamped 12:00 UTC.
 - **Regular grids only (v0.1.0).** The NetCDF parser handles regular lat/lon grids (e.g. GLOFS). Unstructured FVCOM triangular meshes (native LMHOFS/LEOFS output) raise a clear error — regridding is planned. Many NOAA S3 holdings are regridded; check `info` output.
 - **Model data, not observations.** OFS/CMEMS fields are hydrodynamic model output (assimilated, but still model). Treat as guidance; validate against in-situ or satellite SST where it matters.
 - **Filename conventions vary per OFS.** The engine lists the date prefix and filters keys by OFS-code/date/cycle/hour tokens rather than assuming exact names.

@@ -59,8 +59,24 @@ A monitor run with this block would fetch the listed forecast hours
 through `CurrentsPassProvider` and store the resulting COGs as run
 artifacts for survey-flow.
 
-## survey-flow (next module) — the interchange contract
+## GLSEA SST — `GlseaField` / `LakeSeries` (v0.2.0)
 
+`currents.glsea` is the satellite-observed counterpart to the
+model-based paths above:
+
+- **`GlseaField`** (temperature-only masked grids) feeds survey-flow's
+  temperature overlay directly, and `select_bbox()` clips it to any
+  site AOI for survey-monitor-style per-pass mean series via
+  `spatial_mean()`.
+- **`LakeSeries`** (lake-wide daily averages) is the natural baseline
+  for anomaly detection: compare a site-window `spatial_mean()` series
+  against the lake average to separate local change from basin-wide
+  warming/cooling.
+- A future survey-qgis algorithm can render `GlseaField` timesteps as
+  the SST layer under animated current vectors from `CurrentField`;
+  both share the same `(nt, ny, nx)` / bounds conventions.
+
+## survey-flow (next module) — the interchange contract
 survey-flow consumes, in order of preference:
 
 1. `CurrentField` objects (in-process).

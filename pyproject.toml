@@ -4,13 +4,13 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "survey-currents"
-version = "0.1.0"
-description = "Surface-current and water-temperature acquisition engine for surveying and remote sensing: NOAA Operational Forecast Systems (anonymous S3) and Copernicus Marine Service fields as a canonical CurrentField model with COG export and provenance"
+version = "0.2.0"
+description = "Surface-current and water-temperature acquisition engine for surveying and remote sensing: NOAA Operational Forecast Systems (anonymous S3), Copernicus Marine Service, and NOAA GLSEA Great-Lakes satellite sea-surface temperature as canonical CurrentField/GlseaField models with COG export and provenance"
 readme = "README.md"
 requires-python = ">=3.9"
 license = { text = "MIT" }
 authors = [{ name = "crieck2010" }]
-keywords = ["surveying", "remote-sensing", "ocean-currents", "noaa", "glofs", "copernicus", "cmems", "water-temperature", "flow-field"]
+keywords = ["surveying", "remote-sensing", "ocean-currents", "noaa", "glofs", "copernicus", "cmems", "water-temperature", "flow-field", "glsea", "great-lakes", "sea-surface-temperature"]
 classifiers = [
     "Programming Language :: Python :: 3",
     "License :: OSI Approved :: MIT License",

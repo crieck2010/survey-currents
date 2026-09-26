@@ -3,8 +3,11 @@
 `survey-currents` is a pure-Python **acquisition engine**: it turns
 operational hydrodynamic forecast products into one canonical in-memory
 model (`CurrentField`) plus on-disk artifacts (NetCDF, COGs, provenance
-sidecars). It does no rendering and no scheduling — those belong to
-survey-flow, survey-animate, and survey-monitor respectively.
+sidecars). Since v0.2.0 it also acquires NOAA GLSEA satellite
+sea-surface temperature into the companion `GlseaField` model (plus
+`LakeSeries` lake-average series). It does no rendering and no
+scheduling — those belong to survey-flow, survey-animate, and
+survey-monitor respectively.
 
 ## Module map
 
@@ -17,6 +20,13 @@ src/currents/
                    Network: s3_list / s3_download (urllib stdlib path,
                    boto3 fast path). Parsing: parse_ofs_netcdf (xarray,
                    lazy). Orchestrator: fetch_currents -> stack_steps.
+    glsea.py       NOAA GLSEA satellite SST via ERDDAP (stdlib urllib;
+                   netCDF4 lazy). fetch_glsea_sst -> GlseaField (masked
+                   SST grids + url/sha256/retrieved_at provenance);
+                   fetch_glsea_lake_averages -> LakeSeries (stdlib csv).
+                   Bboxes are validated against the grid's clipped
+                   lakes-region extent (notably the -92.41995 longitude
+                   floor) before any download.
     cmems.py       copernicusmarine wrapper. subset_cmems downloads one
                    NetCDF; parse_cmems_netcdf -> CurrentField.
                    require_toolbox() fails fast with setup instructions
@@ -40,7 +50,8 @@ NOAA OFS (S3, anonymous) ──┐
 CMEMS (toolbox, account) ──┘                                        │
                                                               stack_steps
                                                                     │
-                                                             CurrentField
+NOAA GLSEA (ERDDAP, no account) ──> SST subset NetCDF ──> parse ──>  │
+                                                             CurrentField / GlseaField
                                                               (nt,ny,nx)
                                                                     ├──> to_netcdf / to_json
                                                                     ├──> export_cogs  -> survey-flow
@@ -48,9 +59,10 @@ CMEMS (toolbox, account) ──┘                                        │
                                                                     └──> align_to_thermal_zone -> survey-thermal
 ```
 
-Every download writes a provenance sidecar next to the file; the
-`CurrentField.provenance` dict carries the parse-time record
-(variable names chosen, grid type) forward.
+Every download writes a provenance sidecar next to the file (S3/CMEMS
+path); the GLSEA path carries url/sha256/retrieved_at in the field's
+`provenance` dict. The `CurrentField.provenance` dict carries the
+parse-time record (variable names chosen, grid type) forward.
 
 ## Key design decisions
 
@@ -63,9 +75,14 @@ Every download writes a provenance sidecar next to the file; the
   conventions differ per model, so `filter_keys` matches on
   OFS-code/date/cycle/hour tokens inside the documented date prefix
   instead of constructing an exact filename.
+- **Validate before downloading.** The GLSEA grid is clipped to the
+  lakes region, so `validate_glsea_bbox` rejects out-of-extent boxes
+  (notably the −92.41995 longitude floor) before any bytes move.
+  Failing fast on the client keeps ERDDAP load down and errors
+  actionable.
 - **Regular grids in v0.1.0.** The parser requires u/v to be indexed by
   lat/lon dims and raises a clear `ValueError` for unstructured
-  (FVCOM) meshes. Regridding is the planned v0.2.0 work — the
+  (FVCOM) meshes. Regridding is deferred to a later release — the
   `CurrentField` contract does not change.
 - **No sibling imports.** Interop is duck-typed: `CurrentsPassProvider`
   returns survey-monitor's real `PassInfo` when that package is

@@ -218,6 +218,58 @@ concatenated along longitude.
 `fetch_mur` raises `CredentialsMissing` with setup instructions —
 the keyless OISST source keeps working.
 
+## 6. Copernicus ERA5 — global atmospheric reanalysis (free CDS account)
+
+ERA5 hourly data on single levels (`reanalysis-era5-single-levels` on the
+Copernicus Climate Data Store): hourly 1940–present, 0.25° global grid.
+Fetched through the `cdsapi` package (lazy import — the engine imports
+cleanly without it). Needs a **free** CDS account: register at
+https://cds.climate.copernicus.eu/, accept the ERA5 Terms of Use, and
+create `~/.cdsapirc` (`url:` + `key:`) or set `CDSAPI_URL` /
+`CDSAPI_KEY`. Without working credentials `fetch_era5` raises
+`CredentialsMissing` with these exact steps.
+
+### Variables
+
+| Short key | CDS variable name(s) | On-wire grid(s) | Converted units |
+|---|---|---|---|
+| `wind` | `10m_u_component_of_wind`, `10m_v_component_of_wind` | `u10`, `v10` | m/s (rendered as wind speed) |
+| `msl` | `mean_sea_level_pressure` | `msl` | hPa (Pa ÷ 100) |
+| `t2m` | `2m_temperature` | `t2m` | °C (K − 273.15) |
+| `tp` | `total_precipitation` | `tp` | mm per hourly step (m × 1000) |
+
+`fetch_era5(variables, bbox, start, end, stride_hours=6)` — `variables`
+is one key or a list; `"wind"` fetches the u/v pair. `stride_hours=6`
+samples 00/06/12/18 UTC; `24` gives daily 12:00 UTC; `168` weekly, etc.
+
+Request shape (built by `currents.era5.era5_request`, one per calendar
+month per longitude window — CDS request-size hygiene):
+
+```python
+{
+    "product_type": "reanalysis",
+    "variable": ["10m_u_component_of_wind", "10m_v_component_of_wind"],
+    "year": "2024", "month": "01",
+    "day": ["06", "07"], "time": ["00:00", "06:00", "12:00", "18:00"],
+    "area": [31.0, -98.0, 29.0, -97.0],  # N, W, S, E
+    "grid": "0.25/0.25",
+    "data_format": "netcdf", "download_format": "unarchived",
+}
+```
+
+Notes:
+
+- bboxes use the conventional −180..180 convention; antimeridian-crossing
+  boxes split into two CDS requests and are concatenated (with the shared
+  180°/−180° seam column deduplicated) — see `era5_area_windows`.
+- The CDS latitude axis arrives descending (N→S) and longitudes 0–360;
+  both are normalized to increasing / −180..180 on ingest
+  (`_parse_era5_bytes`). Time comes from `valid_time` (new CDS) or `time`.
+- ERA5 is a reanalysis with a ~5-day release lag — requests past today
+  are refused before any download.
+- Provenance records the CDS dataset id, the exact request dicts,
+  per-payload SHA-256 (combined), byte counts, and retrieval time.
+
 ## Choosing a source
 
 - **US Great Lakes / coasts, no signup:** NOAA OFS (LMHOFS for Lake
@@ -230,6 +282,10 @@ the keyless OISST source keeps working.
 - **Global ultra-high-resolution SST, free Earthdata account:**
   NASA JPL MUR v4.1 — daily ~1 km analysis, 2002–present; coastal
   detail OISST cannot resolve.
+- **Global atmosphere (wind, pressure, air temperature, precipitation),
+  free CDS account:** Copernicus ERA5 — hourly 0.25° reanalysis,
+  1940–present; the answer for "winds", "storm", "heat", "rain"
+  visualizations (see `currents.era5`).
 - **Any other coastline:** CMEMS global physics.
 - **Blending with satellites:** use `align_to_thermal_zone()` to compare
   model water temperature against survey-thermal Landsat LST passes over

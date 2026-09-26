@@ -4,6 +4,35 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.0] - 2026-09-26
+
+### Added
+- ERA5 adapter (`src/currents/era5.py`): Copernicus ERA5 hourly single-level
+  reanalysis (1940–present, 0.25° global) via the `cdsapi` package (lazy
+  import — the engine imports cleanly without it; free CDS account required,
+  `CredentialsMissing` carries the exact setup steps).
+  - `fetch_era5(variables, bbox, start, end, stride_hours=6)` with short
+    variable keys: `wind` (10-m u/v pair, rendered as wind speed), `msl`
+    (mean sea-level pressure, Pa→hPa), `t2m` (2-m air temperature, K→°C),
+    `tp` (total precipitation, m→mm per hourly step). Requests chunked by
+    calendar month (CDS limits); antimeridian-crossing bboxes split into two
+    requests and concatenated with the seam meridian deduplicated.
+  - New `Era5Field` model: `grids` dict of `(nt, ny, nx)` masked arrays,
+    `times`/`lats`/`lons` (−180..180, increasing), `values` property (the
+    render-ready base grid), `overlay_grids` (non-base variables for contour
+    overlays, e.g. isobars), `select_time`/`select_bbox`, JSON round-trip,
+    `Era5Field.synthetic()`. Duck-types into `survey-viz`'s `render_viz`.
+  - Provenance: CDS dataset id, exact request dicts, per-payload SHA-256
+    (combined), byte counts, retrieval time, unit-conversion notes.
+  - CLI: `fetch-era5` (`--variables`, `--bbox`, `--start`, `--end`,
+    `--stride-hours`), `era5-synthetic`.
+  - 45 new offline tests (fake `cdsapi` module via `sys.modules`; no live
+    CDS calls in the suite). Live CDS fetch not yet verified — needs the
+    user's CDS credentials.
+- Docs: `docs/DATA_SOURCES.md` gained §6 (ERA5 request shape, variables,
+  credentials, antimeridian handling); README adapter table + `Era5Field`
+  section + Python/CLI examples.
+
 ## [0.3.0] - 2026-09-26
 
 ### Added

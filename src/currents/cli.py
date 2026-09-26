@@ -147,6 +147,32 @@ def cmd_fetch_mur(a: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_fetch_era5(a: argparse.Namespace) -> int:
+    from .era5 import fetch_era5
+    variables = [v.strip() for v in a.variables.split(",") if v.strip()]
+    field = fetch_era5(variables, _parse_bbox(a.bbox), a.start, a.end,
+                       stride_hours=a.stride_hours)
+    path = f"{a.out.rstrip('/')}.json"
+    field.to_json(path)
+    print(f"fetched {len(field.times)} ERA5 timesteps "
+          f"(variables={','.join(field.variables)}) -> {path}")
+    print(f"source={field.source} bounds={field.bounds}")
+    print(f"sha256={field.provenance['sha256']}")
+    return 0
+
+
+def cmd_era5_synthetic(a: argparse.Namespace) -> int:
+    from .era5 import Era5Field
+    variables = [v.strip() for v in a.variables.split(",") if v.strip()]
+    field = Era5Field.synthetic(variables=variables, nt=a.nt, seed=a.seed,
+                                source=a.source)
+    path = f"{a.out.rstrip('/')}.json"
+    field.to_json(path)
+    print(f"wrote synthetic ERA5 field ({len(field.times)} steps, "
+          f"variables={','.join(field.variables)}) -> {path}")
+    return 0
+
+
 def cmd_sst_synthetic(a: argparse.Namespace) -> int:
     from .sst_global import SstField
     field = SstField.synthetic(nt=a.nt, seed=a.seed, source=a.source)
@@ -256,6 +282,32 @@ def build_parser() -> argparse.ArgumentParser:
                    help="source label recorded on the field")
     s.add_argument("--out", default="sst_synthetic", help="output path prefix")
     s.set_defaults(func=cmd_sst_synthetic)
+
+    s = sub.add_parser("fetch-era5",
+                       help="fetch Copernicus ERA5 hourly reanalysis grids "
+                            "(needs network + free CDS account)")
+    s.add_argument("--variables", default="wind,msl",
+                   help="comma-separated keys: wind,msl,t2m,tp (default wind,msl)")
+    s.add_argument("--bbox", required=True, help="min_lon,min_lat,max_lon,max_lat "
+                   "(conventional -180..180; antimeridian-crossing boxes wrap)")
+    s.add_argument("--start", required=True, help="start date YYYY-MM-DD")
+    s.add_argument("--end", required=True, help="end date YYYY-MM-DD")
+    s.add_argument("--stride-hours", type=int, default=6,
+                   help="time stride in hours: 6 -> 00/06/12/18 UTC; "
+                        "24 -> daily 12:00 UTC (default 6)")
+    s.add_argument("--out", default="era5", help="output path prefix")
+    s.set_defaults(func=cmd_fetch_era5)
+
+    s = sub.add_parser("era5-synthetic",
+                       help="write a deterministic synthetic ERA5 field (offline)")
+    s.add_argument("--variables", default="wind,msl",
+                   help="comma-separated keys: wind,msl,t2m,tp (default wind,msl)")
+    s.add_argument("--nt", type=int, default=4)
+    s.add_argument("--seed", type=int, default=7)
+    s.add_argument("--source", default="synthetic",
+                   help="source label recorded on the field")
+    s.add_argument("--out", default="era5_synthetic", help="output path prefix")
+    s.set_defaults(func=cmd_era5_synthetic)
     return p
 
 

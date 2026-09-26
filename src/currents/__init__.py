@@ -17,8 +17,13 @@ the ``pip install`` extra.
 
 from __future__ import annotations
 
-__version__ = "0.3.0"
+__version__ = "0.4.0"
 
+from .era5 import (ERA5_DATASET, ERA5_RES, ERA5_START, ERA5_VARIABLES,
+                   CredentialsMissing as Era5CredentialsMissing, Era5Field,
+                   era5_area_windows, era5_cds_names, era5_month_chunks,
+                   era5_request, era5_sample_plan, fetch_era5,
+                   normalize_era5_variables, validate_era5_bbox)
 from .glsea import (LAKE_COLUMNS, GlseaField, LakeSeries,
                     fetch_glsea_lake_averages, fetch_glsea_sst,
                     glsea_averages_url, glsea_sst_url, validate_glsea_bbox)
@@ -58,6 +63,20 @@ __all__ = [
     "mur_subset_urls",
     "earthdata_credentials",
     "validate_sst_bbox",
+    "Era5Field",
+    "Era5CredentialsMissing",
+    "ERA5_DATASET",
+    "ERA5_START",
+    "ERA5_RES",
+    "ERA5_VARIABLES",
+    "fetch_era5",
+    "normalize_era5_variables",
+    "validate_era5_bbox",
+    "era5_area_windows",
+    "era5_cds_names",
+    "era5_month_chunks",
+    "era5_request",
+    "era5_sample_plan",
     "PROVENANCE_VERSION",
     "read_provenance",
     "verify_provenance",

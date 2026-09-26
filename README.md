@@ -14,6 +14,7 @@ Surface-current and water-temperature acquisition engine for surveying and remot
 | NOAA GLSEA via ERDDAP tabledap (`glsea_avgtemps_3`) | No signup | Great Lakes (per-lake daily averages) | lake-wide | daily, 2006–present |
 | NOAA OISST v2.1 via CoastWatch ERDDAP (`ncdcOisst21Agg`) | No signup | **Global ocean** | 0.25° (~28 km) | daily analysis, 1981–present |
 | NASA JPL MUR v4.1 via Earthdata OPeNDAP | Free Earthdata Login | **Global ocean** | ~0.01° (~1 km) | daily analysis, 2002–present |
+| Copernicus ERA5 via CDS API (`reanalysis-era5-single-levels`) | Free CDS account | **Global atmosphere** | 0.25° (~28 km) | hourly reanalysis, 1940–present |
 
 Registered NOAA models include **GLOFS** (Great Lakes, 5 km, 60 h), **LMHOFS** (Lake Michigan/Huron, 50 m–2.5 km, 120 h — the source of the Lake Michigan reel), LEOFS, CBOFS, DBOFS, GoMOFS, WCOFS, NGOFS2, SFBOFS, TBOFS, CIOFS, CREOFS, SSCOFS. Full table in `docs/DATA_SOURCES.md`.
 
@@ -88,6 +89,20 @@ series = fetch_glsea_lake_averages("superior", "2025-01-01", "2025-12-31")
 print(series.n, f"{series.mean():.2f} degC mean")
 ```
 
+Copernicus ERA5 reanalysis (global atmosphere — free CDS account, needs `cdsapi` + `netCDF4`):
+
+```python
+from currents.era5 import fetch_era5
+
+# 10-m wind + mean sea-level pressure over the Gulf of Mexico,
+# daily 12:00 UTC through January 2024.
+field = fetch_era5(["wind", "msl"], bbox=(-98.0, 18.0, -80.0, 31.0),
+                   start="2024-01-01", end="2024-01-31", stride_hours=24)
+print(field.grids["msl"].shape)   # (31, ny, nx) masked array, hPa
+print(field.wind_speed.shape)     # (31, ny, nx) wind speed, m/s
+print(field.overlay_grids.keys()) # dict_keys(['msl']) — contour overlay
+```
+
 ## CLI
 
 ```bash
@@ -103,6 +118,9 @@ survey-currents fetch-glsea-sst --bbox -92.0,46.5,-87.0,48.0 \
     --start 2025-01-01 --end 2025-12-31 --stride-days 30 --out superior_sst
 survey-currents fetch-glsea-averages --lake superior \
     --start 2025-01-01 --end 2025-12-31 --out superior_avg
+survey-currents fetch-era5 --variables wind,msl --bbox=-98,18,-80,31 \
+    --start 2024-01-01 --end 2024-01-31 --stride-hours 24 --out gom_era5
+survey-currents era5-synthetic --variables wind,msl --nt 4 --out era5_demo
 survey-currents glsea-synthetic --nt 4 --out glsea_demo
 survey-currents fetch-oisst --bbox -80,20,-60,40 \
     --start 2020-01-01 --end 2020-12-31 --stride-days 30 --out atlantic_sst
@@ -132,6 +150,14 @@ Satellite SST converges on `GlseaField` (`src/currents/glsea.py`):
 - `LakeSeries`: lake-wide daily average temps (dates + temps lists, °C), parsed with stdlib `csv` — no netCDF4 needed
 - Provenance dict carries the exact ERDDAP URL, SHA-256 of the downloaded bytes, and retrieval timestamp
 
+Atmospheric reanalysis converges on `Era5Field` (`src/currents/era5.py`):
+
+- `grids`: dict of (nt, ny, nx) numpy masked arrays (`u10`/`v10` in m/s, `msl` in hPa, `t2m` in °C, `tp` in mm)
+- `times`: ISO-8601 timestamps (hourly); `lats`/`lons`: increasing vectors (−180..180)
+- `values` property: the rendered base grid (wind speed for `wind`, else the single grid); `overlay_grids`: non-base variables for contour overlays (e.g. isobars)
+- `spatial_mean()`, `select_time()`, `select_bbox()`, JSON round-trip, `Era5Field.synthetic()`
+- `fetch_era5(variables, bbox, start, end, stride_hours=6)` via `cdsapi` (lazy import, free CDS account); requests chunked by calendar month; provenance carries the CDS request dicts, SHA-256, and retrieval timestamp
+
 ## Interoperability
 
 - **survey-monitor**: `CurrentsPassProvider` in `currents/interop.py` implements the `PassProvider` interface (`list_passes`/`metrics`) — each forecast hour becomes a monitored pass with `speed_mean`/`u_mean`/`v_mean`/`temp_mean` metrics.
@@ -146,6 +172,8 @@ src/currents/
     models.py      # CurrentField + NOAA OFS registry
     noaa_ofs.py    # anonymous S3 listing/download, NetCDF parsing
     glsea.py       # NOAA GLSEA satellite SST (griddap) + lake averages (tabledap)
+    sst_global.py  # NOAA OISST v2.1 + NASA JPL MUR v4.1 global SST
+    era5.py        # Copernicus ERA5 hourly reanalysis (wind/msl/t2m/tp) via cdsapi
     cmems.py       # copernicusmarine subset wrapper + parser
     convert.py     # per-timestep 4-band GeoTIFF/COG export
     provenance.py  # SHA-256 provenance sidecars

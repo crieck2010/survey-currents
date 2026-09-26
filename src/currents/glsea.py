@@ -204,7 +204,8 @@ def _download_bytes(url: str, timeout: int = 300) -> bytes:
             with urllib.request.urlopen(url, timeout=timeout) as resp:
                 return resp.read()
         except (urllib.error.URLError, http.client.RemoteDisconnected,
-                TimeoutError, ConnectionError) as exc:
+                http.client.IncompleteRead, TimeoutError,
+                ConnectionError) as exc:
             last = exc
             time.sleep(2 * (attempt + 1))
     raise RuntimeError(f"download failed after 3 attempts: {url}") from last

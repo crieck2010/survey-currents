@@ -127,6 +127,97 @@ be ascending.
   `superior→Sup`, `michigan→Mich`, `huron→Huron`, `erie→Erie`,
   `ontario→Ont`; unknown names raise `ValueError`
 
+## 4. NOAA OISST v2.1 — global satellite SST (no account)
+
+Daily global sea-surface temperature analysis (AVHRR-only final
+product), served by NOAA CoastWatch ERDDAP. The keyless global-SST
+companion to GLSEA. Verified live 2026-09-26.
+
+- Endpoint: `https://coastwatch.pfeg.noaa.gov/erddap/griddap/ncdcOisst21Agg.nc`
+- Variable `sst` (float, °C, `_FillValue` −9.99 → masked); dims
+  `(time, zlev, latitude, longitude)` — the singleton `zlev` axis
+  (0.0 m) **must** be indexed explicitly as `[(0.0)]`; ERDDAP 404s
+  without it
+- Daily timesteps stamped **12:00 UTC**; coverage **1981-09-01–present**
+- Grid 0.25°: latitude −89.875..89.875, longitude **0.125..359.875
+  (0–360 convention)**
+
+Request shape (built by `currents.sst_global.oisst_sst_urls`):
+
+```
+sst[(<start>ISO):<stride>:(<end>ISO)][(0.0)][(<lat_min>):(<lat_max>)][(<lon360_min>):(<lon360_max>)]
+```
+
+with ISO like `2020-01-01T12:00:00Z`.
+
+**Longitude handling.** The engine accepts conventional −180..180
+bboxes and converts to 0–360 internally (`oisst_lon_windows`);
+downstream fields are normalized back to −180..180, sorted
+increasing. Three cases:
+
+- Normal boxes → one request, e.g. `(−80, ., −60, .)` → `(280.0, 300.0)`.
+- **Antimeridian-crossing** boxes, e.g. `(170, ., −170, .)` → one
+  wrapped window `(170.0, 190.0)`.
+- Boxes whose 0–360 window **crosses 360°** (e.g. `(−170, ., 170, .)`
+  → `(190.0, 530.0)`) cannot be expressed in one ERDDAP query: the
+  engine issues **two requests** and concatenates along longitude —
+  never silently truncated. Full-globe boxes (span ≥ 359.9°) request
+  the whole grid.
+
+**Time chunking.** Long windows are split into ≤5-year requests
+(`OISST_MAX_YEARS_PER_REQUEST`) because ERDDAP drops very long time
+ranges; results are concatenated along time.
+
+## 5. NASA JPL MUR v4.1 — global ultra-high-resolution SST (free Earthdata account)
+
+The GHRSST Level 4 MUR global foundation SST analysis (~0.01°,
+~1 km — the highest-resolution global SST in this engine), via the
+NASA Earthdata OPeNDAP service. Verified live via NASA CMR
+2026-09-26 (collection `C1996881146-POCLOUD`).
+
+**Granule discovery (not construction).** Before any data request,
+`fetch_mur` calls the **public NASA CMR granule search API**
+(`cmr.earthdata.nasa.gov/search/granules.json`, keyless) for
+`C1996881146-POCLOUD` over the requested window
+(`cmr_search_mur_granules`), then matches each sampled day to a real
+granule (`mur_match_granules`, by title stamp then `time_start`). The
+OPeNDAP service URL for each granule is the OPeNDAP link CMR
+advertises on it when present, else the documented Earthdata URL
+pattern for the collection (`_mur_service_url` — recorded per
+granule as `"cmr-link"` / `"constructed"` in provenance). A sampled
+day with no discovered granule raises `RuntimeError` — an honest gap,
+never an invented granule name. `mur_granule_title` remains as a
+tested naming/reference helper (the CMR-verified naming pattern),
+not as the discovery mechanism.
+
+- Service: `https://opendap.earthdata.nasa.gov/collections/C1996881146-POCLOUD/granules/<granule-title>`
+- Granule titles embed the analysis time (always 09:00 UTC), e.g.
+  `20260925090000-JPL-L4_GHRSST-SSTfnd-MUR-GLOB-v02.0-fv04.1`
+- Variable `analysed_sst` (**Kelvin** on the wire, usually packed as
+  scaled shorts; converted to °C by the engine); dims `(time, lat,
+  lon)` — one analysis per granule
+- Coverage **2002-06-01–present**; one granule per sampled day
+  (`stride_days`, default 30)
+
+Request shape (built by `currents.sst_global.mur_subset_urls`):
+
+```
+<granule>.nc?analysed_sst[0:1:0][<j0>:1:<j1>][<i0>:1:<i1>]
+```
+
+Grid index windows come from the granule's own `.das`/`.dds`
+metadata (parsed by `_parse_mur_grid`) — no hardcoded grid, so the
+engine survives upstream grid revisions. MUR's longitude axis is
+−180..180; antimeridian-crossing bboxes become two subset requests
+concatenated along longitude.
+
+**Authentication.** OPeNDAP requires a free Earthdata Login account.
+`earthdata_credentials()` checks `EARTHDATA_USERNAME` /
+`EARTHDATA_PASSWORD` first, then a `~/.netrc` entry for
+`opendap.earthdata.nasa.gov`. With no credentials (or an HTTP 401),
+`fetch_mur` raises `CredentialsMissing` with setup instructions —
+the keyless OISST source keeps working.
+
 ## Choosing a source
 
 - **US Great Lakes / coasts, no signup:** NOAA OFS (LMHOFS for Lake
@@ -134,6 +225,11 @@ be ascending.
 - **Great Lakes satellite SST, no signup:** NOAA GLSEA — observed
   analysis rather than model output; pairs with OFS fields for
   model-vs-satellite temperature comparison.
+- **Global satellite SST, no signup:** NOAA OISST v2.1 — daily 0.25°
+  analysis, 1981–present; the global answer to GLSEA.
+- **Global ultra-high-resolution SST, free Earthdata account:**
+  NASA JPL MUR v4.1 — daily ~1 km analysis, 2002–present; coastal
+  detail OISST cannot resolve.
 - **Any other coastline:** CMEMS global physics.
 - **Blending with satellites:** use `align_to_thermal_zone()` to compare
   model water temperature against survey-thermal Landsat LST passes over

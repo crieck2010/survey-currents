@@ -2,7 +2,7 @@
 
 Surface-current and water-temperature acquisition engine for surveying and remote sensing — the first module of the earthwatch-suite **flow-field animation program** (the pipeline that produces mapped.earth-style animated current/temperature reels).
 
-`survey-currents` pulls hourly current-vector (u/v) and water-temperature fields from **operational hydrodynamic forecast models** — not satellites — into one canonical `CurrentField` model with provenance, COG export, and survey-suite interoperability. Since v0.2.0 it also pulls **satellite-derived daily sea-surface temperature** from NOAA's GLSEA analysis (Great Lakes only) into a companion `GlseaField` model, plus lake-wide average temperature series.
+`survey-currents` pulls hourly current-vector (u/v) and water-temperature fields from **operational hydrodynamic forecast models** — not satellites — into one canonical `CurrentField` model with provenance, COG export, and survey-suite interoperability. Since v0.2.0 it also pulls **satellite-derived daily sea-surface temperature** from NOAA's GLSEA analysis (Great Lakes only) into a companion `GlseaField` model, plus lake-wide average temperature series. Since v0.3.0 it pulls **global satellite SST** from two more sources into a companion `SstField` model: NOAA OISST v2.1 (keyless, 0.25°, 1981–present) and NASA JPL MUR v4.1 (free Earthdata Login, ~1 km, 2002–present).
 
 ## Data sources
 
@@ -12,6 +12,8 @@ Surface-current and water-temperature acquisition engine for surveying and remot
 | Copernicus Marine Service (`copernicusmarine` toolbox) | Free account | Global ocean | 1/12° (~9 km) | NRT + forecast |
 | NOAA GLSEA via ERDDAP griddap (`GLSEA_ACSPO_GCS`) | No signup | **Great Lakes only** | ~1.5 km | daily analysis, 2006–present |
 | NOAA GLSEA via ERDDAP tabledap (`glsea_avgtemps_3`) | No signup | Great Lakes (per-lake daily averages) | lake-wide | daily, 2006–present |
+| NOAA OISST v2.1 via CoastWatch ERDDAP (`ncdcOisst21Agg`) | No signup | **Global ocean** | 0.25° (~28 km) | daily analysis, 1981–present |
+| NASA JPL MUR v4.1 via Earthdata OPeNDAP | Free Earthdata Login | **Global ocean** | ~0.01° (~1 km) | daily analysis, 2002–present |
 
 Registered NOAA models include **GLOFS** (Great Lakes, 5 km, 60 h), **LMHOFS** (Lake Michigan/Huron, 50 m–2.5 km, 120 h — the source of the Lake Michigan reel), LEOFS, CBOFS, DBOFS, GoMOFS, WCOFS, NGOFS2, SFBOFS, TBOFS, CIOFS, CREOFS, SSCOFS. Full table in `docs/DATA_SOURCES.md`.
 
@@ -102,6 +104,11 @@ survey-currents fetch-glsea-sst --bbox -92.0,46.5,-87.0,48.0 \
 survey-currents fetch-glsea-averages --lake superior \
     --start 2025-01-01 --end 2025-12-31 --out superior_avg
 survey-currents glsea-synthetic --nt 4 --out glsea_demo
+survey-currents fetch-oisst --bbox -80,20,-60,40 \
+    --start 2020-01-01 --end 2020-12-31 --stride-days 30 --out atlantic_sst
+survey-currents fetch-mur --bbox -80,20,-60,40 \
+    --start 2024-01-01 --end 2024-01-31 --stride-days 7 --out atlantic_mur
+survey-currents sst-synthetic --nt 4 --out sst_demo
 ```
 
 ## The canonical model

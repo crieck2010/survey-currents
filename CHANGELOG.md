@@ -4,6 +4,46 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.0] - 2026-09-26
+
+### Added
+- Global-SST adapter (`src/currents/sst_global.py`): two new satellite
+  sea-surface temperature sources returning the new `SstField` model
+  (`sst` as `(nt, ny, nx)` °C masked array, `times`/`lats`/`lons`,
+  provenance with exact URLs + SHA-256 + retrieval time — mirrors the
+  `GlseaField` conventions and duck-types into `survey-viz`'s
+  `render_viz`).
+  - `fetch_oisst(bbox, start, end, stride_days=30)` — NOAA OISST v2.1
+    (`ncdcOisst21Agg` griddap on CoastWatch ERDDAP): daily SST,
+    1981–present, 0.25° global grid. Keyless. Handles the 0–360
+    longitude axis internally (bboxes stay conventional −180..180;
+    antimeridian-crossing boxes wrap; boxes whose 0–360 window crosses
+    360° are fetched as two requests and concatenated — never silently
+    truncated). Long windows are chunked into ≤5-year requests
+    (ERDDAP drops very long time ranges).
+  - `fetch_mur(bbox, start, end, stride_days=30)` — NASA JPL MUR v4.1
+    (GHRSST L4, CMR collection `C1996881146-POCLOUD`) via the
+    Earthdata OPeNDAP endpoint: daily SST, 2002–present, ~0.01° (~1 km)
+    global grid. **Granules are discovered, not constructed:**
+    `cmr_search_mur_granules` queries the public NASA CMR granule API
+    (keyless) and `mur_match_granules` pairs each sampled day with a
+    real granule; service URLs prefer the CMR-advertised OPeNDAP link
+    (`_mur_service_url`, recorded per granule). A day with no
+    discovered granule raises `RuntimeError` — never an invented name.
+    Grid index windows come from each granule's own
+    `.das`/`.dds` metadata (no hardcoded grid); `analysed_sst` is
+    converted Kelvin→°C. Needs a free Earthdata Login account
+    (`EARTHDATA_USERNAME`/`EARTHDATA_PASSWORD` or `~/.netrc`); missing
+    or rejected credentials raise `CredentialsMissing` with setup
+    instructions, while OISST stays fully usable without credentials.
+- CLI: `fetch-oisst`, `fetch-mur`, `sst-synthetic` (offline
+  deterministic fixture, `--source` label).
+- 48 new fully-offline tests (mocked HTTP, fabricated NetCDF
+  payloads): URL construction, 0–360 window logic, antimeridian
+  handling, bbox/date/stride validation, credentials handling,
+  OISST depth-dimension indexing, parsing/masking, Kelvin→Celsius,
+  serialization round-trips.
+
 ## [0.2.0] - 2026-09-26
 
 ### Added

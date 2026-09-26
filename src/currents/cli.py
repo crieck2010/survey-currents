@@ -123,6 +123,39 @@ def cmd_glsea_synthetic(a: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_fetch_oisst(a: argparse.Namespace) -> int:
+    from .sst_global import fetch_oisst
+    field = fetch_oisst(_parse_bbox(a.bbox), a.start, a.end,
+                        stride_days=a.stride_days)
+    path = f"{a.out.rstrip('/')}.json"
+    field.to_json(path)
+    print(f"fetched {len(field.times)} OISST v2.1 SST timesteps -> {path}")
+    print(f"source={field.source} bounds={field.bounds}")
+    print(f"sha256={field.provenance['sha256']}")
+    return 0
+
+
+def cmd_fetch_mur(a: argparse.Namespace) -> int:
+    from .sst_global import fetch_mur
+    field = fetch_mur(_parse_bbox(a.bbox), a.start, a.end,
+                      stride_days=a.stride_days)
+    path = f"{a.out.rstrip('/')}.json"
+    field.to_json(path)
+    print(f"fetched {len(field.times)} MUR v4.1 SST timesteps -> {path}")
+    print(f"source={field.source} bounds={field.bounds}")
+    print(f"combined_sha256={field.provenance['combined_sha256']}")
+    return 0
+
+
+def cmd_sst_synthetic(a: argparse.Namespace) -> int:
+    from .sst_global import SstField
+    field = SstField.synthetic(nt=a.nt, seed=a.seed, source=a.source)
+    path = f"{a.out.rstrip('/')}.json"
+    field.to_json(path)
+    print(f"wrote synthetic global SST field ({len(field.times)} steps) -> {path}")
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="survey-currents",
                                 description="Surface-current / water-temperature acquisition engine")
@@ -191,6 +224,38 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--seed", type=int, default=7)
     s.add_argument("--out", default="glsea_synthetic", help="output path prefix")
     s.set_defaults(func=cmd_glsea_synthetic)
+
+    s = sub.add_parser("fetch-oisst",
+                       help="fetch NOAA OISST v2.1 daily global SST grids (needs network)")
+    s.add_argument("--bbox", required=True, help="min_lon,min_lat,max_lon,max_lat "
+                   "(conventional -180..180; antimeridian-crossing boxes wrap)")
+    s.add_argument("--start", required=True, help="start date YYYY-MM-DD")
+    s.add_argument("--end", required=True, help="end date YYYY-MM-DD")
+    s.add_argument("--stride-days", type=int, default=30,
+                   help="time stride in days (default 30)")
+    s.add_argument("--out", default="oisst_sst", help="output path prefix")
+    s.set_defaults(func=cmd_fetch_oisst)
+
+    s = sub.add_parser("fetch-mur",
+                       help="fetch NASA JPL MUR v4.1 daily global SST grids "
+                            "(needs network + Earthdata Login)")
+    s.add_argument("--bbox", required=True, help="min_lon,min_lat,max_lon,max_lat "
+                   "(conventional -180..180; antimeridian-crossing boxes wrap)")
+    s.add_argument("--start", required=True, help="start date YYYY-MM-DD")
+    s.add_argument("--end", required=True, help="end date YYYY-MM-DD")
+    s.add_argument("--stride-days", type=int, default=30,
+                   help="granule sampling stride in days (default 30)")
+    s.add_argument("--out", default="mur_sst", help="output path prefix")
+    s.set_defaults(func=cmd_fetch_mur)
+
+    s = sub.add_parser("sst-synthetic",
+                       help="write a deterministic synthetic global SST field (offline)")
+    s.add_argument("--nt", type=int, default=4)
+    s.add_argument("--seed", type=int, default=7)
+    s.add_argument("--source", default="synthetic",
+                   help="source label recorded on the field")
+    s.add_argument("--out", default="sst_synthetic", help="output path prefix")
+    s.set_defaults(func=cmd_sst_synthetic)
     return p
 
 

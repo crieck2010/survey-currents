@@ -17,7 +17,7 @@ the ``pip install`` extra.
 
 from __future__ import annotations
 
-__version__ = "0.12.0"
+__version__ = "0.13.0"
 
 from .basemaps import (GEBCO_NATIVE_ARCSEC, GEBCO_VERSION, GEBCO_ZIP_URL,
                        NATURAL_EARTH_LAYERS, NATURAL_EARTH_SCALES, TopoField,
@@ -77,6 +77,12 @@ from .storms import (IBTRACS_ALL_FILE, IBTRACS_NC_DIR,
                      SSHS_COLORS, SSHS_LABELS, StormField, StormTrack,
                      ensure_ibtracs_file, fetch_ibtracs, ibtracs_filename,
                      ibtracs_url, sshs_category, storm_cache_dir)
+from .streamgages import (FT_TO_M, FT3S_TO_M3S, USGS_DV_BASE,
+                          USGS_MAX_CACHE_AGE_DAYS, USGS_MISSING,
+                          USGS_PARAMETERS, USGS_RECORD_START, USGS_SITE_BASE,
+                          USGS_SITE_LIMIT, GageField, GageRecord,
+                          dv_request_url, fetch_usgs, site_inventory_url,
+                          usgs_cache_dir)
 
 __all__ = [
     "CurrentField",
@@ -128,6 +134,21 @@ __all__ = [
     "ibtracs_url",
     "ibtracs_filename",
     "storm_cache_dir",
+    "GageField",
+    "GageRecord",
+    "fetch_usgs",
+    "usgs_cache_dir",
+    "site_inventory_url",
+    "dv_request_url",
+    "USGS_SITE_BASE",
+    "USGS_DV_BASE",
+    "USGS_PARAMETERS",
+    "USGS_MISSING",
+    "USGS_RECORD_START",
+    "USGS_MAX_CACHE_AGE_DAYS",
+    "USGS_SITE_LIMIT",
+    "FT3S_TO_M3S",
+    "FT_TO_M",
     "sshs_category",
     "IBTRACS_VERSION",
     "IBTRACS_NC_DIR",

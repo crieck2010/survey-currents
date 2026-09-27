@@ -573,6 +573,39 @@ Operational notes:
   is most defensible against the USA-agency values — documented in
   `docs/STORMS.md` on the `survey-viz` side.
 
+## 15. USGS Water Services (NWIS) — US streamgage daily values (no account)
+
+The canonical US streamflow source: the USGS Water Services site
+service discovers daily-data gages in a bbox (RDB), and the
+daily-values service fetches per-site daily MEAN series for discharge
+(00060, ft³/s) and gage height (00065, ft). Keyless anonymous HTTPS,
+US-only coverage (Puerto Rico / Pacific territories included).
+
+| Item | Value |
+|---|---|
+| Site service | `https://waterservices.usgs.gov/nwis/site/` — verified live 2026-09-27: keyless HTTPS, `?format=rdb&bBox=minLon,minLat,maxLon,maxLat&hasDataTypeCd=dv&parameterCd=00060&siteOutput=expanded`; `siteOutput=expanded` adds drainage area (`drain_area_va`, sq mi), HUC, timezone, altitude |
+| Daily-values service | `https://waterservices.usgs.gov/nwis/dv/` — verified live 2026-09-27: keyless HTTPS, `?format=json&sites=…&startDT=…&endDT=…&parameterCd=00060,00065&statCd=00003`; daily MEAN stated explicitly; qualifiers `P` (provisional) / `A` (approved) / `e` (estimated) carried per value |
+| Missing values | USGS sentinel `"-999999"` → NaN; days with no reported value are NaN in the series and listed by `GageRecord.missing_days()` — never filled, never interpolated |
+| Access pattern | Per-bbox inventory + per-batch (20 sites) dv payloads cached under `$SURVEY_CURRENTS_CACHE/streamgages` with atomic writes, SHA-256 sidecars verified on every hit, corruption-triggered redownload, 7-day freshness revalidation (recent daily values are provisional and get revised), `refresh=True` forces re-download — repeated renders never re-hit the network |
+| Query | `fetch_usgs(bbox, start, end, parameters=("00060",), min_record_days=30, site_limit=200, units="native")` — sites sorted by site number (deterministic); sites with fewer than `min_record_days` finite daily values of the primary parameter are excluded but counted (`n_sites_excluded_short_record`); sites returning no series are counted (`n_sites_no_data`, e.g. inventory sites with no record in the window) |
+| Empty results | NWIS is US-only: bboxes outside USGS coverage (or with no qualifying gages) yield an empty `GageField` with `provenance["empty_reason"]` — never fabricated data |
+| Units | Native USGS units by default (ft³/s, ft); `units="si"` (or `GageField.to_si()`) converts with exact NIST factors `1 ft³/s = 0.028316846592 m³/s`, `1 ft = 0.3048 m`; the unit system is recorded in provenance and on every `unit_label` |
+| Provenance | Exact request URLs (site + each dv batch), `retrieved_at`, bbox, dates, parameters, statistic (`00003`), per-class site counts, cache status per entry, tool version |
+| Model | `GageField` (`GageRecord` list) — `percentile_of_record()` (latest value's rank in its own record, the survey-viz marker-color rule), `regional_median()` (daily median across sites, NaN-aware, the regional-hydrograph rule), `select_site()`, `to_si()`, `to_dict`/`from_dict`, `to_json`/`from_json`, deterministic `synthetic()` (4 sites incl. an engineered 10-day gap block) |
+| CLI | `fetch-usgs --bbox … --start … --end … [--parameters 00060,00065] [--min-record-days 30] [--site-limit 200] [--units si]`, `usgs-synthetic` |
+| Interop | Consumed by the `usgs` source in survey-viz (streamflow planning); `GageField.to_dict()` feeds the dedicated gage-point renderer — point/time-series data, never converted through a scalar grid |
+
+Operational notes:
+
+- Site inventory can include stations with no values in a requested
+  window (verified 2026-09-27: station 04160050 returns zero series for
+  tested 2020/2025 windows) — those are counted, not errors.
+- Recent daily values are provisional (`P`): cache freshness defaults
+  to 7 days, not the 30-day discipline of static archives.
+- The 20-site dv batches keep each cache entry small; large bboxes
+  should be subdivided by the caller (the national inventory is tens of
+  thousands of sites; default `site_limit=200`).
+
 ## Choosing a source
 
 - **US Great Lakes / coasts, no signup:** NOAA OFS (LMHOFS for Lake
@@ -620,10 +653,12 @@ Operational notes:
   2002–present, land-only; the answer for "water storage",
   "groundwater", "aquifer", "drought", and "total water storage"
   descriptions. For *rainfall/precipitation* use GPM IMERG or ERA5
-  (`tp`) — never GRACE. For river discharge or streamflow there is no
-  adapter yet (honest refusal; streamgages are item 11 of the
-  remote-sensing program). For sea level there is no adapter either —
-  it is a different observable from GRACE TWS.
+  (`tp`) — never GRACE. **For river discharge or streamflow the answer
+  is USGS NWIS streamgages** (see section 15): daily observed discharge
+  (00060, ft³/s) and gage height (00065, ft) from the per-site gage
+  network — use GRACE for basin-scale storage context alongside it, not
+  as a substitute. For sea level there is no adapter — it is a
+  different observable from GRACE TWS.
 - **Blending with satellites:** use `align_to_thermal_zone()` to compare
   model water temperature against survey-thermal Landsat LST passes over
   the same zone and window.

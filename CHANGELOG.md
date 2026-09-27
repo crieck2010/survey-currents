@@ -4,6 +4,46 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.13.0] - 2026-09-27
+
+### Added
+- USGS Water Services (NWIS) streamgage daily-value adapter
+  (`src/currents/streamgages.py`): `fetch_usgs(bbox, start, end,
+  parameters=("00060",), min_record_days=30, site_limit=200,
+  units="native")` -> `GageField` (list of `GageRecord`: site number,
+  station name, lat/lon, HUC, drainage area when published, and
+  per-parameter daily series for 00060 discharge in ft³/s and 00065
+  gage height in ft — the native USGS publication units; the USGS
+  missing-value sentinel `"-999999"` becomes NaN and is listed by
+  `GageRecord.missing_days()`, never filled). **Verified live
+  2026-09-27:** keyless anonymous HTTPS — site service
+  `https://waterservices.usgs.gov/nwis/site/` (RDB;
+  `hasDataTypeCd=dv&parameterCd=…&siteOutput=expanded` adds drainage
+  area, HUC, timezone) and dv service
+  `https://waterservices.usgs.gov/nwis/dv/` (JSON, `statCd=00003`
+  daily MEAN stated explicitly, qualifiers P/A/e carried). Sites are
+  discovered in the bbox (deterministic order by site number), daily
+  values fetched in batches of 20, and sites below `min_record_days`
+  finite daily values are excluded but counted in provenance
+  (`n_sites_no_data`, `n_sites_excluded_short_record`); sites with no
+  data in the window yield an honest empty field with `empty_reason`
+  (NWIS is US-only). Cache discipline mirrors the storms/GRACE
+  adapters: per-bbox inventory and per-batch dv payloads are cached
+  under `$SURVEY_CURRENTS_CACHE/streamgages` with atomic writes,
+  SHA-256 sidecars verified on every hit, corruption-triggered
+  redownload, `max_cache_age_days=7` revalidation (recent daily values
+  are provisional and get revised), `refresh=True` forces re-download.
+  `units="si"` converts to m³/s / m on exact NIST factors
+  (`1 ft³/s = 0.028316846592 m³/s`). `GageRecord.percentile_of_record()`
+  (rank of the latest value within its own record) and
+  `GageField.regional_median()` (daily median across sites, NaN-aware)
+  document the survey-viz rendering rules; `GageField.to_si()`,
+  `select_site()`, `to_dict`/`from_dict`, `to_json`/`from_json`, and a
+  deterministic `synthetic()` fixture (4 sites incl. an engineered
+  10-day gap block) round out the model. CLI: `fetch-usgs` and
+  `usgs-synthetic`. 36 new offline tests (2 live opt-in tests guarded
+  by `SURVEY_CURRENTS_LIVE=1`).
+
 ## [0.12.0] - 2026-09-27
 
 ### Added

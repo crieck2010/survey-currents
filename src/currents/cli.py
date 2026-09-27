@@ -370,6 +370,39 @@ def cmd_storms_synthetic(a: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_fetch_usgs(a: argparse.Namespace) -> int:
+    from .streamgages import fetch_usgs
+    parameters = tuple(s.strip() for s in a.parameters.split(",") if s.strip())
+    field = fetch_usgs(_parse_bbox(a.bbox), a.start, a.end,
+                       parameters=parameters,
+                       min_record_days=a.min_record_days,
+                       site_limit=a.site_limit, units=a.units)
+    path = f"{a.out.rstrip('/')}.json"
+    field.to_json(path)
+    print(f"fetched USGS streamgage field ({len(field)} sites) -> {path}")
+    print(f"source={field.source} units={field.units} "
+          f"unit_label={field.unit_label} bounds={field.bounds}")
+    prov = field.provenance
+    print(f"discovered={prov.get('n_sites_discovered')} "
+          f"with_data={prov.get('n_sites_with_data')} "
+          f"no_data={prov.get('n_sites_no_data')} "
+          f"excluded={prov.get('n_sites_excluded_short_record')}")
+    return 0
+
+
+def cmd_usgs_synthetic(a: argparse.Namespace) -> int:
+    from .streamgages import GageField
+    parameters = tuple(s.strip() for s in a.parameters.split(",") if s.strip())
+    field = GageField.synthetic(bbox=_parse_bbox(a.bbox), start=a.start,
+                                end=a.end, n_sites=a.n_sites,
+                                seed=a.seed, parameters=parameters,
+                                source=a.source)
+    path = f"{a.out.rstrip('/')}.json"
+    field.to_json(path)
+    print(f"wrote synthetic USGS streamgage field ({len(field)} sites) -> {path}")
+    return 0
+
+
 def cmd_sst_synthetic(a: argparse.Namespace) -> int:
     from .sst_global import SstField
     field = SstField.synthetic(nt=a.nt, seed=a.seed, source=a.source)
@@ -665,6 +698,44 @@ def build_parser() -> argparse.ArgumentParser:
                    help="source label recorded on the field")
     s.add_argument("--out", default="storms_synthetic", help="output path prefix")
     s.set_defaults(func=cmd_storms_synthetic)
+
+    s = sub.add_parser("fetch-usgs",
+                       help="fetch USGS NWIS streamgage daily values "
+                            "(needs network; keyless USGS Water Services; "
+                            "inventory + data cached)")
+    s.add_argument("--bbox", required=True, help="min_lon,min_lat,max_lon,max_lat")
+    s.add_argument("--start", required=True, help="start date YYYY-MM-DD")
+    s.add_argument("--end", required=True, help="end date YYYY-MM-DD")
+    s.add_argument("--parameters", default="00060",
+                   help="comma-separated dv parameter codes: 00060 discharge "
+                        "(ft3/s), 00065 gage height (ft) (default: 00060)")
+    s.add_argument("--min-record-days", type=int, default=30,
+                   help="keep sites with at least this many finite daily "
+                        "values of the primary parameter (default: 30)")
+    s.add_argument("--site-limit", type=int, default=200,
+                   help="deterministic cap on sites fetched, sorted by site "
+                        "number (default: 200)")
+    s.add_argument("--units", default="native", choices=("native", "si"),
+                   help="native USGS units (ft3/s / ft) or si (m3/s / m) "
+                        "(default: native)")
+    s.add_argument("--out", default="usgs_gages", help="output path prefix")
+    s.set_defaults(func=cmd_fetch_usgs)
+
+    s = sub.add_parser("usgs-synthetic",
+                       help="write a deterministic synthetic streamgage field (offline)")
+    s.add_argument("--bbox", default="-83.5,42.0,-82.0,43.5",
+                   help="min_lon,min_lat,max_lon,max_lat")
+    s.add_argument("--start", default="2024-06-01", help="start date YYYY-MM-DD")
+    s.add_argument("--end", default="2024-08-31", help="end date YYYY-MM-DD")
+    s.add_argument("--n-sites", type=int, default=4,
+                   help="number of synthetic gages (default: 4)")
+    s.add_argument("--parameters", default="00060",
+                   help="comma-separated parameter codes (default: 00060)")
+    s.add_argument("--seed", type=int, default=11, help="random seed")
+    s.add_argument("--source", default="synthetic",
+                   help="source label recorded on the field")
+    s.add_argument("--out", default="usgs_synthetic", help="output path prefix")
+    s.set_defaults(func=cmd_usgs_synthetic)
 
     s = sub.add_parser("sst-synthetic",
                        help="write a deterministic synthetic global SST field (offline)")

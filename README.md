@@ -23,6 +23,7 @@ Surface-current and water-temperature acquisition engine for surveying and remot
 | Natural Earth via anonymous S3 | No signup | **Global coastline/country vectors** | 110m/50m/10m cartographic scales | static |
 | NOAA IBTrACS v04r01 via NCEI HTTPS (download-once, cached) | No signup | **Global tropical-cyclone best tracks** | 3-hourly fixes | 1980–present (1842– with `--full-archive`) |
 | CSR GRACE/GRACE-FO RL06.3 via anonymous HTTPS (download-once, cached) | No signup | **Global land water storage** | 0.25° output grid (mascon native resolution coarser) | monthly anomalies, 2002–present |
+| USGS Water Services NWIS via keyless HTTPS (inventory + dv cached) | No signup | **US streamgages** | per-site daily values | daily discharge/gage height, 1857–present |
 
 Registered NOAA models include **GLOFS** (Great Lakes, 5 km, 60 h), **LMHOFS** (Lake Michigan/Huron, 50 m–2.5 km, 120 h — the source of the Lake Michigan reel), LEOFS, CBOFS, DBOFS, GoMOFS, WCOFS, NGOFS2, SFBOFS, TBOFS, CIOFS, CREOFS, SSCOFS. Full table in `docs/DATA_SOURCES.md`.
 
@@ -169,6 +170,11 @@ survey-currents storms-synthetic --out storms_demo
 survey-currents fetch-grace --bbox=-125,30,-110,45 \
     --start 2020-01-01 --end 2020-12-31 --out grace_ca
 survey-currents grace-synthetic --out grace_demo
+# USGS NWIS streamgage daily values (no account; cached inventory + data):
+survey-currents fetch-usgs --bbox=-83.5,42.0,-82.0,43.5 \
+    --start 2026-09-20 --end 2026-09-24 --parameters 00060,00065 \
+    --min-record-days 3 --out huron_gages
+survey-currents usgs-synthetic --out usgs_demo
 ```
 
 ## The canonical model
@@ -220,6 +226,13 @@ Daily satellite precipitation converges on `RainField` (`src/currents/imerg.py`)
 - `fetch_imerg(bbox, start, end, accumulate="daily", run="late", stride_days=1)` — downloads the GPM IMERG V07 half-hourly HDF5 granules over **authenticated HTTPS** (free Earthdata Login; verified live 2026-09-27 — OPeNDAP catalog/`.dds`/`.das` metadata are keyless, data download 302s to URS), subsets to the bbox locally, and accumulates; runs: `early` (~4 h), `late` (~14 h, default), `final` (~3.5 months, gauge-adjusted); record 2000-06-01–present; 404 granules skipped with a `skipped_slots` provenance note and per-day `{"expected": 48, "retrieved": n}` coverage
 - `select_time()`, `select_bbox()`, JSON round-trip, `RainField.synthetic()`; provenance carries the exact download URLs, per-file SHA-256, run, accumulation mode, and retrieval timestamp
 - CLI: `fetch-imerg`, `rain-synthetic`
+
+USGS streamgage daily values converge on `GageField` (`src/currents/streamgages.py`):
+
+- Per-site records: `site_no`, `site_name`, `lat`/`lon`, HUC, drainage area (sq mi, when published), and daily series for 00060 discharge (ft³/s) and 00065 gage height (ft) — the native USGS publication units; missing days are NaN and listed by `missing_days()`, never filled
+- `fetch_usgs(bbox, start, end, parameters=("00060",), min_record_days=30, site_limit=200, units="native")` via the **keyless USGS Water Services** site (RDB) + dv (JSON, daily MEAN) endpoints; per-bbox inventory and per-batch dv payloads cached under `$SURVEY_CURRENTS_CACHE/streamgages` (7-day revalidation, SHA-256 sidecars); sites below `min_record_days` finite values excluded but counted; NWIS is US-only — bboxes outside coverage yield an honest empty field with `empty_reason`
+- `to_si()` converts to m³/s / m on exact NIST factors (`1 ft³/s = 0.028316846592 m³/s`); `percentile_of_record()` and `regional_median()` document the survey-viz marker-color and regional-hydrograph rules; `select_site()`, JSON round-trip, `GageField.synthetic()` (incl. an engineered 10-day gap block)
+- CLI: `fetch-usgs`, `usgs-synthetic`
 
 ## Interoperability
 

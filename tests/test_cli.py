@@ -85,3 +85,52 @@ def test_main_error_path(capsys):
 def test_main_bad_args():
     with pytest.raises(SystemExit):
         cli.main([])
+
+
+def test_cli_has_currents_global_subcommands():
+    from currents.cli import build_parser
+    p = build_parser()
+    subs = {a.dest for a in p._subparsers._group_actions[0]._choices_actions}
+    assert {"fetch-oscar", "fetch-cmems-currents", "currents-synthetic"} <= subs
+
+
+def test_currents_synthetic_command(tmp_path, capsys):
+    ns = type("NS", (), {"nt": 2, "seed": 13,
+                         "out": str(tmp_path / "cg")})()
+    assert cli.cmd_currents_synthetic(ns) == 0
+    for label in ("oscar", "cmems-currents"):
+        path = str(tmp_path / f"cg_{label}.json")
+        assert os.path.exists(path)
+        f = CurrentField.from_json(path)
+        assert len(f.times) == 2
+    oscar = CurrentField.from_json(str(tmp_path / "cg_oscar.json"))
+    assert oscar.temperature is None
+    cmems = CurrentField.from_json(str(tmp_path / "cg_cmems-currents.json"))
+    assert cmems.temperature is not None
+
+
+def test_fetch_oscar_command_mocked(monkeypatch, tmp_path, capsys):
+    import currents.currents_global as cg
+    monkeypatch.setattr(cg, "fetch_oscar",
+                        lambda bbox, start, end, stride_days=5:
+                        cg.oscar_synthetic(nt=2))
+    ns = type("NS", (), {"bbox": "-81,25,-55,43", "start": "2024-01-01",
+                         "end": "2024-01-15", "stride_days": 5,
+                         "out": str(tmp_path / "o")})()
+    assert cli.cmd_fetch_oscar(ns) == 0
+    out = capsys.readouterr().out
+    assert "OSCAR v2.0" in out
+
+
+def test_fetch_cmems_currents_command_mocked(monkeypatch, tmp_path, capsys):
+    import currents.currents_global as cg
+    monkeypatch.setattr(cg, "fetch_cmems_currents",
+                        lambda bbox, start, end, stride_days=1, work_dir=None:
+                        cg.cmems_currents_synthetic(nt=2))
+    ns = type("NS", (), {"bbox": "-80,20,-60,40", "start": "2024-01-01",
+                         "end": "2024-01-05", "stride_days": 1,
+                         "work_dir": None,
+                         "out": str(tmp_path / "c")})()
+    assert cli.cmd_fetch_cmems_currents(ns) == 0
+    out = capsys.readouterr().out
+    assert "CMEMS" in out

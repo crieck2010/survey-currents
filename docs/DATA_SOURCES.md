@@ -270,6 +270,80 @@ Notes:
 - Provenance records the CDS dataset id, the exact request dicts,
   per-payload SHA-256 (combined), byte counts, and retrieval time.
 
+## 7. NASA PODAAC OSCAR v2.0 — global surface currents (free Earthdata account)
+
+OSCAR (Ocean Surface Current Analyses Real-time) v2.0: daily-averaged
+surface currents, **1993–present**, 0.25° global grid, variables `u`/`v`
+(m/s, east/north positive). This is the answer for "currents"
+visualizations outside the NOAA OFS footprints.
+
+Access goes through the **Earthdata OPeNDAP** endpoint and **requires a
+free Earthdata Login** — unauthenticated requests are redirected to the
+login page (HTTP 302). Set `EARTHDATA_USERNAME`/`EARTHDATA_PASSWORD` or
+add a `~/.netrc` entry for `opendap.earthdata.nasa.gov` (register free
+at https://urs.earthdata.nasa.gov/users/new). Without credentials
+`fetch_oscar` raises `CredentialsMissing` with these exact steps (a 401
+from the server maps to the same error).
+
+Three latency tiers live in separate NASA CMR collections; the fetch
+picks the right tier per date with a pure, offline-testable rule
+(`oscar_collection_for`):
+
+| Tier | CMR collection | Coverage | Latency | Picked when |
+|---|---|---|---|---|
+| `final` | `C2098858642-POCLOUD` | 1993-01-01 → present | ~1.5 yr | date older than today − 540 d |
+| `interim` | `C2102959417-POCLOUD` | 2020-01-01 → present | ~1 mo | date older than today − 45 d |
+| `nrt` | `C2102958977-POCLOUD` | 2021-01-01 → present | ~2 d | otherwise |
+
+Granule names are deterministic *and* verified through the keyless NASA
+CMR granule search (same pattern as the MUR adapter) — the fetch never
+invents a granule name:
+
+```
+oscar_currents_final_YYYYMMDD.nc        # e.g. oscar_currents_final_20240115.nc
+oscar_currents_interim_YYYYMMDD.nc
+oscar_currents_nrt_YYYYMMDD.nc
+```
+
+Request shape (one constrained OPeNDAP URL per date per longitude
+window, built by `currents.currents_global.oscar_subset_urls`):
+
+```
+https://opendap.earthdata.nasa.gov/collections/C2098858642-POCLOUD/granules/oscar_currents_final_20240115.nc
+    ?u[0:1:0][1116:1:1220][459:1:531],v[0:1:0][1116:1:1220][459:1:531]
+```
+
+Notes:
+
+- On-wire dimension order is the unusual **(time, longitude, latitude)** —
+  `u[time][lon][lat]` — not (time, lat, lon). The parse step asserts this
+  and transposes to the canonical (nt, ny, nx); a reordered product
+  fails loudly instead of silently transposing.
+- The grid is the 0–360 convention (lon 0..359.75, lat −89.75..89.75);
+  −180..180 bboxes are converted internally (same approach as OISST),
+  antimeridian-crossing boxes wrap into a single 0–360 window, and
+  360°-crossing windows split into two requests and are concatenated
+  with the seam deduplicated.
+- Fill value −999.0 is masked. Frame timestamps are the daily granule
+  dates at 00:00 UTC (OSCAR granules are daily averages).
+- `fetch_oscar(bbox, start, end, stride_days=5)` returns a
+  `CurrentField` with `temperature=None` (OSCAR is currents-only).
+  Provenance records the exact OPeNDAP URLs, per-payload SHA-256
+  (combined), retrieval time, the three CMR collection ids, the pick
+  rule, and the per-date collection + granule title used.
+- The CMEMS `global-physics-daily` preset (`uo`/`vo`/`thetao`, 1/12°,
+  daily) is also wrapped to the standard fetch signature as
+  `fetch_cmems_currents(bbox, start, end, stride_days=1)` (see
+  `src/currents/cmems.py` for the toolbox path): one NetCDF is
+  downloaded for the whole range, then timesteps are stride-selected.
+  `thetao` is potential temperature (°C), carried as-is — recorded in
+  provenance; it is not a foundation SST.
+- **Verified-source corrections (2026-09-26):** OSCAR is **not** on
+  CoastWatch ERDDAP — the old `jplOscar_LonPM180` dataset id 404s
+  (removed); v2.0 is served from Earthdata OPeNDAP behind Earthdata
+  Login. NOMADS OPeNDAP is retired (Service Change Notice 25-81) and is
+  not used. Both corrections are recorded in OSCAR provenance.
+
 ## Choosing a source
 
 - **US Great Lakes / coasts, no signup:** NOAA OFS (LMHOFS for Lake
@@ -286,6 +360,15 @@ Notes:
   free CDS account:** Copernicus ERA5 — hourly 0.25° reanalysis,
   1940–present; the answer for "winds", "storm", "heat", "rain"
   visualizations (see `currents.era5`).
+- **Global surface currents, free Earthdata account:** NASA PODAAC
+  OSCAR v2.0 — daily 0.25° currents, 1993–present, with Final/Interim/NRT
+  latency tiers picked per date; the answer for "currents" visualizations
+  outside the NOAA OFS footprints (see `currents.currents_global`).
+  **Corrections:** not on CoastWatch ERDDAP (old `jplOscar_LonPM180`
+  id 404s — removed); NOMADS OPeNDAP is retired (SCN 25-81).
+- **Global high-resolution currents, free CMEMS account:** CMEMS
+  `global-physics-daily` preset wrapped as `fetch_cmems_currents`
+  (1/12°, daily; `thetao` carried as-is).
 - **Any other coastline:** CMEMS global physics.
 - **Blending with satellites:** use `align_to_thermal_zone()` to compare
   model water temperature against survey-thermal Landsat LST passes over

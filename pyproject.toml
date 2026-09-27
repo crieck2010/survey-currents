@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "survey-currents"
-version = "0.4.0"
+version = "0.5.0"
 description = "Surface-current and water-temperature acquisition engine for surveying and remote sensing: NOAA Operational Forecast Systems (anonymous S3), Copernicus Marine Service, and NOAA GLSEA Great-Lakes satellite sea-surface temperature as canonical CurrentField/GlseaField models with COG export and provenance"
 readme = "README.md"
 requires-python = ">=3.9"

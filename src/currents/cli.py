@@ -173,6 +173,44 @@ def cmd_era5_synthetic(a: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_fetch_oscar(a: argparse.Namespace) -> int:
+    from .currents_global import fetch_oscar
+    field = fetch_oscar(_parse_bbox(a.bbox), a.start, a.end,
+                        stride_days=a.stride_days)
+    path = f"{a.out.rstrip('/')}.json"
+    field.to_json(path)
+    print(f"fetched {len(field.times)} OSCAR v2.0 current timesteps -> {path}")
+    print(f"source={field.source} bounds={field.bounds}")
+    print(f"collections_used={field.provenance.get('collections_used')}")
+    print(f"combined_sha256={field.provenance.get('combined_sha256')}")
+    return 0
+
+
+def cmd_fetch_cmems_currents(a: argparse.Namespace) -> int:
+    from .currents_global import fetch_cmems_currents
+    field = fetch_cmems_currents(_parse_bbox(a.bbox), a.start, a.end,
+                                 stride_days=a.stride_days,
+                                 work_dir=a.work_dir)
+    path = f"{a.out.rstrip('/')}.json"
+    field.to_json(path)
+    print(f"fetched {len(field.times)} CMEMS current timesteps -> {path}")
+    print(f"source={field.source} bounds={field.bounds}")
+    print(f"netcdf={field.provenance.get('netcdf_path', '(in-memory)')}")
+    return 0
+
+
+def cmd_currents_synthetic(a: argparse.Namespace) -> int:
+    from .currents_global import cmems_currents_synthetic, oscar_synthetic
+    for label, make in (("oscar", oscar_synthetic),
+                        ("cmems-currents", cmems_currents_synthetic)):
+        field = make(nt=a.nt, seed=a.seed)
+        path = f"{a.out.rstrip('/')}_{label}.json"
+        field.to_json(path)
+        print(f"wrote synthetic {label} field "
+              f"({len(field.times)} steps) -> {path}")
+    return 0
+
+
 def cmd_sst_synthetic(a: argparse.Namespace) -> int:
     from .sst_global import SstField
     field = SstField.synthetic(nt=a.nt, seed=a.seed, source=a.source)
@@ -308,6 +346,41 @@ def build_parser() -> argparse.ArgumentParser:
                    help="source label recorded on the field")
     s.add_argument("--out", default="era5_synthetic", help="output path prefix")
     s.set_defaults(func=cmd_era5_synthetic)
+
+    s = sub.add_parser("fetch-oscar",
+                       help="fetch NASA PODAAC OSCAR v2.0 daily global surface "
+                            "currents (needs network + Earthdata Login)")
+    s.add_argument("--bbox", required=True, help="min_lon,min_lat,max_lon,max_lat "
+                   "(conventional -180..180; antimeridian-crossing boxes wrap)")
+    s.add_argument("--start", required=True, help="start date YYYY-MM-DD")
+    s.add_argument("--end", required=True, help="end date YYYY-MM-DD")
+    s.add_argument("--stride-days", type=int, default=5,
+                   help="granule sampling stride in days (default 5)")
+    s.add_argument("--out", default="oscar_currents", help="output path prefix")
+    s.set_defaults(func=cmd_fetch_oscar)
+
+    s = sub.add_parser("fetch-cmems-currents",
+                       help="fetch CMEMS global ocean physics daily currents "
+                            "(needs network + free CMEMS account)")
+    s.add_argument("--bbox", required=True, help="min_lon,min_lat,max_lon,max_lat "
+                   "(conventional -180..180)")
+    s.add_argument("--start", required=True, help="start date YYYY-MM-DD")
+    s.add_argument("--end", required=True, help="end date YYYY-MM-DD")
+    s.add_argument("--stride-days", type=int, default=1,
+                   help="keep every Nth daily timestep (default 1)")
+    s.add_argument("--work-dir", default=None,
+                   help="directory for the downloaded NetCDF "
+                        "(default: a fresh temp dir)")
+    s.add_argument("--out", default="cmems_currents", help="output path prefix")
+    s.set_defaults(func=cmd_fetch_cmems_currents)
+
+    s = sub.add_parser("currents-synthetic",
+                       help="write deterministic synthetic OSCAR + CMEMS current "
+                            "fields (offline)")
+    s.add_argument("--nt", type=int, default=4)
+    s.add_argument("--seed", type=int, default=13)
+    s.add_argument("--out", default="currents_synthetic", help="output path prefix")
+    s.set_defaults(func=cmd_currents_synthetic)
     return p
 
 

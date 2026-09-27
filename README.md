@@ -2,7 +2,7 @@
 
 Surface-current and water-temperature acquisition engine for surveying and remote sensing — the first module of the earthwatch-suite **flow-field animation program** (the pipeline that produces mapped.earth-style animated current/temperature reels).
 
-`survey-currents` pulls hourly current-vector (u/v) and water-temperature fields from **operational hydrodynamic forecast models** — not satellites — into one canonical `CurrentField` model with provenance, COG export, and survey-suite interoperability. Since v0.2.0 it also pulls **satellite-derived daily sea-surface temperature** from NOAA's GLSEA analysis (Great Lakes only) into a companion `GlseaField` model, plus lake-wide average temperature series. Since v0.3.0 it pulls **global satellite SST** from two more sources into a companion `SstField` model: NOAA OISST v2.1 (keyless, 0.25°, 1981–present) and NASA JPL MUR v4.1 (free Earthdata Login, ~1 km, 2002–present).
+`survey-currents` pulls hourly current-vector (u/v) and water-temperature fields from **operational hydrodynamic forecast models** — not satellites — into one canonical `CurrentField` model with provenance, COG export, and survey-suite interoperability. Since v0.2.0 it also pulls **satellite-derived daily sea-surface temperature** from NOAA's GLSEA analysis (Great Lakes only) into a companion `GlseaField` model, plus lake-wide average temperature series. Since v0.3.0 it pulls **global satellite SST** from two more sources into a companion `SstField` model: NOAA OISST v2.1 (keyless, 0.25°, 1981–present) and NASA JPL MUR v4.1 (free Earthdata Login, ~1 km, 2002–present). Since v0.4.0 it pulls **global atmospheric reanalysis** (Copernicus ERA5: wind, pressure, air temperature, precipitation) into a companion `Era5Field` model. Since v0.5.0 it pulls **global surface currents** — NASA PODAAC OSCAR v2.0 (daily, 1993–present, free Earthdata Login) and the CMEMS `global-physics-daily` preset (1/12°, free CMEMS account) — into the canonical `CurrentField` model.
 
 ## Data sources
 
@@ -15,6 +15,8 @@ Surface-current and water-temperature acquisition engine for surveying and remot
 | NOAA OISST v2.1 via CoastWatch ERDDAP (`ncdcOisst21Agg`) | No signup | **Global ocean** | 0.25° (~28 km) | daily analysis, 1981–present |
 | NASA JPL MUR v4.1 via Earthdata OPeNDAP | Free Earthdata Login | **Global ocean** | ~0.01° (~1 km) | daily analysis, 2002–present |
 | Copernicus ERA5 via CDS API (`reanalysis-era5-single-levels`) | Free CDS account | **Global atmosphere** | 0.25° (~28 km) | hourly reanalysis, 1940–present |
+| NASA PODAAC OSCAR v2.0 via Earthdata OPeNDAP | Free Earthdata Login | **Global ocean currents** | 0.25° (~28 km) | daily averages, 1993–present |
+| CMEMS global ocean physics (`global-physics-daily` preset) | Free CMEMS account | **Global ocean currents** | 1/12° (~9 km) | daily analysis+forecast |
 
 Registered NOAA models include **GLOFS** (Great Lakes, 5 km, 60 h), **LMHOFS** (Lake Michigan/Huron, 50 m–2.5 km, 120 h — the source of the Lake Michigan reel), LEOFS, CBOFS, DBOFS, GoMOFS, WCOFS, NGOFS2, SFBOFS, TBOFS, CIOFS, CREOFS, SSCOFS. Full table in `docs/DATA_SOURCES.md`.
 
@@ -92,15 +94,20 @@ print(series.n, f"{series.mean():.2f} degC mean")
 Copernicus ERA5 reanalysis (global atmosphere — free CDS account, needs `cdsapi` + `netCDF4`):
 
 ```python
-from currents.era5 import fetch_era5
+from currents.currents_global import fetch_oscar, fetch_cmems_currents
 
-# 10-m wind + mean sea-level pressure over the Gulf of Mexico,
-# daily 12:00 UTC through January 2024.
-field = fetch_era5(["wind", "msl"], bbox=(-98.0, 18.0, -80.0, 31.0),
-                   start="2024-01-01", end="2024-01-31", stride_hours=24)
-print(field.grids["msl"].shape)   # (31, ny, nx) masked array, hPa
-print(field.wind_speed.shape)     # (31, ny, nx) wind speed, m/s
-print(field.overlay_grids.keys()) # dict_keys(['msl']) — contour overlay
+# Daily surface currents over the Gulf Stream, one granule every 5 days —
+# free Earthdata Login required (see docs/DATA_SOURCES.md).
+field = fetch_oscar(bbox=(-81.0, 25.0, -55.0, 43.0),
+                    start="2024-01-01", end="2024-12-31", stride_days=5)
+print(field.u.shape)          # (74, ny, nx) eastward current, m/s
+print(field.provenance["collections_used"])  # ['final'] — the pick rule
+
+# Higher-resolution currents via the CMEMS global-physics-daily preset
+# (free CMEMS account + copernicusmarine toolbox).
+field = fetch_cmems_currents(bbox=(-81.0, 25.0, -55.0, 43.0),
+                             start="2024-01-01", end="2024-01-31")
+print(field.u.shape, field.temperature.shape)  # (31, ny, nx) each
 ```
 
 ## CLI
@@ -127,6 +134,11 @@ survey-currents fetch-oisst --bbox -80,20,-60,40 \
 survey-currents fetch-mur --bbox -80,20,-60,40 \
     --start 2024-01-01 --end 2024-01-31 --stride-days 7 --out atlantic_mur
 survey-currents sst-synthetic --nt 4 --out sst_demo
+survey-currents fetch-oscar --bbox -81,25,-55,43 \
+    --start 2024-01-01 --end 2024-12-31 --stride-days 5 --out gulfstream_oscar
+survey-currents fetch-cmems-currents --bbox -81,25,-55,43 \
+    --start 2024-01-01 --end 2024-01-31 --out gulfstream_cmems
+survey-currents currents-synthetic --nt 4 --out currents_demo
 ```
 
 ## The canonical model
@@ -174,6 +186,7 @@ src/currents/
     glsea.py       # NOAA GLSEA satellite SST (griddap) + lake averages (tabledap)
     sst_global.py  # NOAA OISST v2.1 + NASA JPL MUR v4.1 global SST
     era5.py        # Copernicus ERA5 hourly reanalysis (wind/msl/t2m/tp) via cdsapi
+    currents_global.py  # NASA PODAAC OSCAR v2.0 + CMEMS global-physics-daily currents
     cmems.py       # copernicusmarine subset wrapper + parser
     convert.py     # per-timestep 4-band GeoTIFF/COG export
     provenance.py  # SHA-256 provenance sidecars

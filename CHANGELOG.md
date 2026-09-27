@@ -4,6 +4,59 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.0] - 2026-09-26
+
+### Added
+- OSCAR v2.0 global surface-current adapter (`src/currents/currents_global.py`):
+  NASA PODAAC OSCAR v2.0 (Ocean Surface Current Analyses Real-time) —
+  daily-averaged surface currents, 1993–present, 0.25° global grid,
+  variables `u`/`v` (m/s). **Verified-source corrections (2026-09-26,
+  also recorded in provenance):** OSCAR is NOT on CoastWatch ERDDAP
+  (the old `jplOscar_LonPM180` dataset id 404s — removed) and NOMADS
+  OPeNDAP is retired (Service Change Notice 25-81); v2.0 is served
+  from Earthdata OPeNDAP behind a free Earthdata Login (unauthenticated
+  requests 302 to the login page).
+  - `fetch_oscar(bbox, start, end, stride_days=5)` -> `CurrentField`
+    (`temperature=None` — OSCAR is currents-only). Per-date latency-tier
+    picking via the pure, offline-testable `oscar_collection_for`
+    (date < today−540d → Final `C2098858642-POCLOUD`; < today−45d →
+    Interim `C2102959417-POCLOUD`; else NRT `C2102958977-POCLOUD`;
+    floor 1993-01-01). Granule names are deterministic
+    (`oscar_currents_{final,interim,nrt}_YYYYMMDD.nc`) AND verified via
+    the keyless NASA CMR granule search (`cmr_search_oscar_granules` /
+    `oscar_match_granule` — a missing granule is an honest
+    `RuntimeError`, never an invented name).
+  - On-wire dimension order is the unusual `(time, longitude, latitude)`
+    — asserted at parse time and transposed to (nt, ny, nx). Grid is
+    0–360 (lon 0..359.75, lat −89.75..89.75); −180..180 bboxes convert
+    internally (same approach as OISST), antimeridian boxes wrap, and
+    360°-crossing windows split into two OPeNDAP requests concatenated
+    with the seam deduplicated (`oscar_lon_windows`,
+    `oscar_index_windows`, `oscar_subset_urls`).
+  - `CredentialsMissing` (OSCAR-specific text) reuses the shared
+    Earthdata env/netrc credential lookup; a 401 from the server maps
+    to the same error. Fill value −999.0 masked; frame timestamps are
+    the daily granule dates at 00:00 UTC.
+  - Provenance: exact OPeNDAP URLs, per-payload SHA-256 (combined),
+    retrieval time, the three CMR collection ids, the pick rule, and
+    the per-date collection + granule title used.
+- `fetch_cmems_currents(bbox, start, end, stride_days=1, work_dir=None)`:
+  the CMEMS `global-physics-daily` preset (`uo`/`vo`/`thetao`, 1/12°,
+  daily) wrapped to the standard fetch signature via
+  `currents.cmems.subset_cmems` + `parse_cmems_netcdf` — one NetCDF
+  downloaded for the whole range, timesteps stride-selected.
+  `thetao` (potential temperature, °C) is carried as-is and documented
+  in provenance (it is not a foundation SST).
+- Synthetic fixtures `oscar_synthetic()` / `cmems_currents_synthetic()`
+  (deterministic, stdlib+numpy) and CLI commands `fetch-oscar`,
+  `fetch-cmems-currents`, `currents-synthetic`.
+- 45 new offline tests (fake NetCDF payloads with the real
+  (time, longitude, latitude) dim order; mocked CMR search, download,
+  credentials, and toolbox — no live network in the suite).
+- Live authenticated OSCAR fetch not yet verified — needs his Earthdata
+  Login credentials; live CMEMS subset not verified either (needs the
+  copernicusmarine toolbox + CMEMS account).
+
 ## [0.4.0] - 2026-09-26
 
 ### Added

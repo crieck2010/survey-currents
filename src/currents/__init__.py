@@ -17,8 +17,17 @@ the ``pip install`` extra.
 
 from __future__ import annotations
 
-__version__ = "0.4.0"
+__version__ = "0.5.0"
 
+from .currents_global import (
+    CMEMS_CURRENTS_PRESET, CMEMS_CURRENTS_VARIABLES, OSCAR_COLLECTIONS,
+    OSCAR_DIM_ORDER, OSCAR_FINAL_MAX_AGE_DAYS, OSCAR_GRANULE_STEMS,
+    OSCAR_INTERIM_MAX_AGE_DAYS, OSCAR_LAT_MAX, OSCAR_LAT_MIN, OSCAR_LON_MAX,
+    OSCAR_LON_MIN, OSCAR_OPENDAP_PATTERN, OSCAR_RES, OSCAR_START,
+    CredentialsMissing as OscarCredentialsMissing, cmems_currents_synthetic,
+    cmr_search_oscar_granules, fetch_cmems_currents, fetch_oscar,
+    oscar_collection_for, oscar_granule_title, oscar_index_windows,
+    oscar_lon_windows, oscar_service_url, oscar_subset_urls, oscar_synthetic)
 from .era5 import (ERA5_DATASET, ERA5_RES, ERA5_START, ERA5_VARIABLES,
                    CredentialsMissing as Era5CredentialsMissing, Era5Field,
                    era5_area_windows, era5_cds_names, era5_month_chunks,
@@ -77,6 +86,32 @@ __all__ = [
     "era5_month_chunks",
     "era5_request",
     "era5_sample_plan",
+    "OSCAR_COLLECTIONS",
+    "OSCAR_GRANULE_STEMS",
+    "OSCAR_OPENDAP_PATTERN",
+    "OSCAR_RES",
+    "OSCAR_LON_MIN",
+    "OSCAR_LON_MAX",
+    "OSCAR_LAT_MIN",
+    "OSCAR_LAT_MAX",
+    "OSCAR_DIM_ORDER",
+    "OSCAR_START",
+    "OSCAR_FINAL_MAX_AGE_DAYS",
+    "OSCAR_INTERIM_MAX_AGE_DAYS",
+    "CMEMS_CURRENTS_PRESET",
+    "CMEMS_CURRENTS_VARIABLES",
+    "OscarCredentialsMissing",
+    "fetch_oscar",
+    "fetch_cmems_currents",
+    "oscar_collection_for",
+    "oscar_granule_title",
+    "oscar_service_url",
+    "cmr_search_oscar_granules",
+    "oscar_lon_windows",
+    "oscar_index_windows",
+    "oscar_subset_urls",
+    "oscar_synthetic",
+    "cmems_currents_synthetic",
     "PROVENANCE_VERSION",
     "read_provenance",
     "verify_provenance",

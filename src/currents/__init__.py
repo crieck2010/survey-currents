@@ -17,7 +17,19 @@ the ``pip install`` extra.
 
 from __future__ import annotations
 
-__version__ = "0.14.0"
+# Single source of truth for the package version: the installed
+# distribution metadata (written from pyproject.toml at install time).
+# This never goes stale the way a hand-edited string does — which is
+# how __version__ silently reported 0.14.0 through the 0.15.x releases.
+try:
+    from importlib.metadata import PackageNotFoundError, version
+
+    __version__ = version("survey-currents")
+except Exception:  # pragma: no cover - editable/uninstalled checkout
+    try:
+        __version__ = version("survey_currents")
+    except PackageNotFoundError:
+        __version__ = "0.0.0+unknown"
 
 from .basemaps import (GEBCO_NATIVE_ARCSEC, GEBCO_VERSION, GEBCO_ZIP_URL,
                        NATURAL_EARTH_LAYERS, NATURAL_EARTH_SCALES, TopoField,

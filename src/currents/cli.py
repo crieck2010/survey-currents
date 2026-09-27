@@ -263,6 +263,34 @@ def cmd_ice_synthetic(a: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_fetch_imerg(a: argparse.Namespace) -> int:
+    from .imerg import fetch_imerg
+    field = fetch_imerg(_parse_bbox(a.bbox), a.start, a.end,
+                        accumulate=a.accumulate, run=a.run,
+                        stride_days=a.stride_days)
+    path = f"{a.out.rstrip('/')}.json"
+    field.to_json(path)
+    print(f"fetched GPM IMERG rain field ({len(field)} steps, run={field.run}, "
+          f"accumulate={field.accumulate}) -> {path}")
+    print(f"source={field.source} units={field.units} bounds={field.bounds}")
+    print(f"n_files={field.provenance.get('n_files')} "
+          f"skipped={len(field.provenance.get('skipped_slots', []))}")
+    return 0
+
+
+def cmd_rain_synthetic(a: argparse.Namespace) -> int:
+    from .imerg import RainField
+    field = RainField.synthetic(bbox=_parse_bbox(a.bbox), start=a.start,
+                                end=a.end, resolution=a.resolution,
+                                accumulate=a.accumulate,
+                                seed=a.seed, source=a.source)
+    path = f"{a.out.rstrip('/')}.json"
+    field.to_json(path)
+    print(f"wrote synthetic IMERG rain field ({len(field)} steps, "
+          f"accumulate={field.accumulate}) -> {path}")
+    return 0
+
+
 def cmd_sst_synthetic(a: argparse.Namespace) -> int:
     from .sst_global import SstField
     field = SstField.synthetic(nt=a.nt, seed=a.seed, source=a.source)
@@ -393,6 +421,40 @@ def build_parser() -> argparse.ArgumentParser:
                    help="source label recorded on the field")
     s.add_argument("--out", default="ice_synthetic", help="output path prefix")
     s.set_defaults(func=cmd_ice_synthetic)
+
+    s = sub.add_parser("fetch-imerg",
+                       help="fetch NASA GPM IMERG half-hourly precipitation "
+                            "(needs network + free Earthdata Login)")
+    s.add_argument("--bbox", required=True, help="min_lon,min_lat,max_lon,max_lat "
+                   "(conventional -180..180; antimeridian-crossing boxes wrap)")
+    s.add_argument("--start", required=True, help="start date YYYY-MM-DD")
+    s.add_argument("--end", required=True, help="end date YYYY-MM-DD")
+    s.add_argument("--run", default="late",
+                   help="early (~4 h latency) / late (~14 h, default) / "
+                        "final (~3.5 months, gauge-adjusted)")
+    s.add_argument("--accumulate", default="daily",
+                   help="daily (default: 48 half-hourly mm/hr rates -> "
+                        "mm/day totals) / native (half-hourly mm/hr rates)")
+    s.add_argument("--stride-days", type=int, default=1,
+                   help="keep every Nth day (default 1)")
+    s.add_argument("--out", default="imerg_rain", help="output path prefix")
+    s.set_defaults(func=cmd_fetch_imerg)
+
+    s = sub.add_parser("rain-synthetic",
+                       help="write a deterministic synthetic IMERG rain field (offline)")
+    s.add_argument("--bbox", default="-125.0,25.0,-66.0,49.0",
+                   help="min_lon,min_lat,max_lon,max_lat")
+    s.add_argument("--start", default="2024-01-01", help="start date YYYY-MM-DD")
+    s.add_argument("--end", default="2024-01-05", help="end date YYYY-MM-DD")
+    s.add_argument("--resolution", type=float, default=1.0,
+                   help="synthetic grid resolution in degrees (default 1.0)")
+    s.add_argument("--accumulate", default="daily",
+                   help="daily (mm/day totals, default) / native (mm/hr rates)")
+    s.add_argument("--seed", type=int, default=7)
+    s.add_argument("--source", default="synthetic",
+                   help="source label recorded on the field")
+    s.add_argument("--out", default="rain_synthetic", help="output path prefix")
+    s.set_defaults(func=cmd_rain_synthetic)
 
     s = sub.add_parser("sst-synthetic",
                        help="write a deterministic synthetic global SST field (offline)")

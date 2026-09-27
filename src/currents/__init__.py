@@ -17,7 +17,7 @@ the ``pip install`` extra.
 
 from __future__ import annotations
 
-__version__ = "0.7.0"
+__version__ = "0.8.0"
 
 from .currents_global import (
     CMEMS_CURRENTS_PRESET, CMEMS_CURRENTS_VARIABLES, OSCAR_COLLECTIONS,
@@ -36,6 +36,14 @@ from .era5 import (ERA5_DATASET, ERA5_RES, ERA5_START, ERA5_VARIABLES,
 from .glsea import (LAKE_COLUMNS, GlseaField, LakeSeries,
                     fetch_glsea_lake_averages, fetch_glsea_sst,
                     glsea_averages_url, glsea_sst_url, validate_glsea_bbox)
+from .imerg import (IMERG_ACCUMULATIONS, IMERG_BASE, IMERG_COLLECTIONS,
+                    IMERG_FILL, IMERG_LATENCY, IMERG_RES, IMERG_START,
+                    IMERG_UNITS_DAILY, IMERG_UNITS_NATIVE, IMERG_VERSION,
+                    CredentialsMissing as ImergCredentialsMissing, RainField,
+                    accumulate_daily, fetch_imerg, imerg_file_url,
+                    imerg_granule_name, imerg_index_windows,
+                    imerg_sample_days, normalize_imerg_accumulate,
+                    normalize_imerg_run)
 from .models import OFS_REGISTRY, CurrentField, OfsModel, get_ofs_model
 from .provenance import PROVENANCE_VERSION, read_provenance, verify_provenance, write_provenance
 from .sst_global import (CMR_GRANULE_SEARCH, CredentialsMissing, SstField,
@@ -97,6 +105,26 @@ __all__ = [
     "NSIDC_CELL_M",
     "HUGHES_A",
     "HUGHES_E2",
+    "RainField",
+    "ImergCredentialsMissing",
+    "IMERG_BASE",
+    "IMERG_VERSION",
+    "IMERG_COLLECTIONS",
+    "IMERG_START",
+    "IMERG_LATENCY",
+    "IMERG_RES",
+    "IMERG_UNITS_DAILY",
+    "IMERG_UNITS_NATIVE",
+    "IMERG_FILL",
+    "IMERG_ACCUMULATIONS",
+    "fetch_imerg",
+    "accumulate_daily",
+    "imerg_granule_name",
+    "imerg_file_url",
+    "imerg_sample_days",
+    "imerg_index_windows",
+    "normalize_imerg_run",
+    "normalize_imerg_accumulate",
     "mur_granule_title",
     "mur_opendap_url",
     "mur_subset_urls",

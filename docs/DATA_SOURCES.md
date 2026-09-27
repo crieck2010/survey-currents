@@ -408,6 +408,46 @@ Operational notes:
   physical product — see the `survey-viz` parser's honest refusal for
   those phrases.
 
+## 10. NASA GPM IMERG V07 — global half-hourly precipitation (free Earthdata Login)
+
+Integrated Multi-satellitE Retrievals for GPM: half-hourly global
+precipitation rates, 2000-06-01–present, three latency runs.
+
+| Item | Value |
+|---|---|
+| Archive | `https://gpm1.gesdisc.eosdis.nasa.gov/data/GPM_L3/{GPM_3IMERGHH.07, GPM_3IMERGHHE.07, GPM_3IMERGHHL.07}/{YYYY}/{DOY}/` (the `/data/` path serves the same granules as `/opendap/` without the DAP overhead) |
+| File naming | `3B-HHR[-E\|-L].MS.MRG.3IMERG.{YYYYMMDD}-S{HHMMSS}-E{HHMMSS}.{HHMM}.V07B.HDF5` — Early/Late carry the `-E`/`-L` infix; the 4th dot-field is the half-hour start (`0000`, `0030`, …, `2330`) |
+| Auth | **Free Earthdata Login** (`EARTHDATA_USERNAME`/`EARTHDATA_PASSWORD` or `.netrc`, same as the MUR path). Verified live 2026-09-27: the OPeNDAP catalog and `.dds`/`.das` metadata are **keyless** (HTTP 200, no credentials), but data download redirects (302) to `urs.earthdata.nasa.gov` for the OAuth handshake and returns 401 without a login |
+| Runs | `early` (~4 h latency, collection `GPM_3IMERGHHE`), `late` (~14 h, `GPM_3IMERGHHL`, **the default**), `final` (~3.5 months, `GPM_3IMERGHH`, gauge-adjusted) |
+| Grid | 0.1° global, 3600 × 1800 (`Grid/lon`, `Grid/lat`); on-wire HDF5 dataspace is `(time=1, lon, lat)` per the `.das` — the adapter resolves the axis order from the actual vector sizes and raises on layout drift |
+| Encoding | `precipitation` in mm/hr, `_FillValue` ≈ −9999.9 → NaN |
+| Record | 2000-06-01–present for all runs (TRMM June 2000 – May 2014, GPM June 2014 – present). The live CMR archive shows V07 reprocessing reaching 1998-01-01 for Early/Final, but the adapter enforces the documented floor: pre-2000 TRMM-era estimates come from a much smaller constellation and are lower quality, especially at high latitudes |
+| Model | `RainField` — `times`/`lats`/`lons`/`values` (mm/day for `accumulate="daily"`, mm/hr for `accumulate="native"`), per-file SHA-256 provenance with exact download URLs |
+
+Operational notes:
+
+- Each fetch downloads **complete global HDF5 granules (48 per day)**
+  and subsets to the bbox locally — simple and robust, but heavy for
+  long windows (each granule is tens of MB). A constrained OPeNDAP
+  range request would be cheaper per byte, but server behavior for
+  authenticated `.dods` queries was unreliable during verification
+  (connection resets), so full-file HTTPS is the documented path.
+  Prefer `run="late"` (better quality than Early for a modest latency
+  cost) and keep windows short, or use `stride_days` for sampling.
+- `accumulate="daily"` (default) sums the 48 half-hourly mm/hr rates
+  into mm/day totals (each slot contributes rate × 0.5 h; a NaN slot
+  contributes 0, an all-NaN day stays NaN). Days with missing granules
+  (404s are skipped, e.g. the most recent day for the Final run)
+  accumulate only the retrieved slots — check
+  `provenance["day_coverage"][day]` (`{"expected": 48, "retrieved": n}`)
+  and `provenance["skipped_slots"]` before trusting a daily total.
+- IMERG is the **observed** precipitation source: it complements the
+  ERA5 reanalysis `tp` (1940–present, model physics). `survey-viz`
+  routes recent/event precipitation phrases to IMERG and long-record
+  or trend phrases to ERA5.
+- HDF5 parsing needs `h5py`: `pip install "survey-currents[imerg]"`
+  (also in the `full` extra). The engine core stays stdlib+numpy.
+
 ## Choosing a source
 
 - **US Great Lakes / coasts, no signup:** NOAA OFS (LMHOFS for Lake
@@ -420,10 +460,19 @@ Operational notes:
 - **Global ultra-high-resolution SST, free Earthdata account:**
   NASA JPL MUR v4.1 — daily ~1 km analysis, 2002–present; coastal
   detail OISST cannot resolve.
-- **Global atmosphere (wind, pressure, air temperature, precipitation),
-  free CDS account:** Copernicus ERA5 — hourly 0.25° reanalysis,
-  1940–present; the answer for "winds", "storm", "heat", "rain"
-  visualizations (see `currents.era5`).
+- **Global precipitation — observed satellite, free Earthdata account:**
+  NASA GPM IMERG V07 — half-hourly 0.1° precipitation, 2000–present,
+  Early/Late/Final latency tiers; the answer for "recent rain",
+  "storm", "hurricane rainfall" visualizations. Prefer Late (default)
+  over Early for quality; use the Final run for research-grade,
+  gauge-adjusted totals (see `currents.imerg`). For climatology,
+  multi-decade trends, or pre-2000 analysis, ERA5 `tp` remains the
+  answer (1940–present reanalysis).
+- **Global atmosphere (wind, pressure, air temperature, long-record
+  precipitation), free CDS account:** Copernicus ERA5 — hourly 0.25°
+  reanalysis, 1940–present; the answer for "winds", "heat", and
+  multi-decade precipitation trends (see `currents.era5`). For
+  *observed* recent precipitation, IMERG above is the better source.
 - **Global surface currents, free Earthdata account:** NASA PODAAC
   OSCAR v2.0 — daily 0.25° currents, 1993–present, with Final/Interim/NRT
   latency tiers picked per date; the answer for "currents" visualizations

@@ -2,7 +2,7 @@
 
 Surface-current and water-temperature acquisition engine for surveying and remote sensing — the first module of the earthwatch-suite **flow-field animation program** (the pipeline that produces mapped.earth-style animated current/temperature reels).
 
-`survey-currents` pulls hourly current-vector (u/v) and water-temperature fields from **operational hydrodynamic forecast models** — not satellites — into one canonical `CurrentField` model with provenance, COG export, and survey-suite interoperability. Since v0.2.0 it also pulls **satellite-derived daily sea-surface temperature** from NOAA's GLSEA analysis (Great Lakes only) into a companion `GlseaField` model, plus lake-wide average temperature series. Since v0.3.0 it pulls **global satellite SST** from two more sources into a companion `SstField` model: NOAA OISST v2.1 (keyless, 0.25°, 1981–present) and NASA JPL MUR v4.1 (free Earthdata Login, ~1 km, 2002–present). Since v0.4.0 it pulls **global atmospheric reanalysis** (Copernicus ERA5: wind, pressure, air temperature, precipitation) into a companion `Era5Field` model. Since v0.5.0 it pulls **global surface currents** — NASA PODAAC OSCAR v2.0 (daily, 1993–present, free Earthdata Login) and the CMEMS `global-physics-daily` preset (1/12°, free CMEMS account) — into the canonical `CurrentField` model.
+`survey-currents` pulls hourly current-vector (u/v) and water-temperature fields from **operational hydrodynamic forecast models** — not satellites — into one canonical `CurrentField` model with provenance, COG export, and survey-suite interoperability. Since v0.2.0 it also pulls **satellite-derived daily sea-surface temperature** from NOAA's GLSEA analysis (Great Lakes only) into a companion `GlseaField` model, plus lake-wide average temperature series. Since v0.3.0 it pulls **global satellite SST** from two more sources into a companion `SstField` model: NOAA OISST v2.1 (keyless, 0.25°, 1981–present) and NASA JPL MUR v4.1 (free Earthdata Login, ~1 km, 2002–present). Since v0.4.0 it pulls **global atmospheric reanalysis** (Copernicus ERA5: wind, pressure, air temperature, precipitation) into a companion `Era5Field` model. Since v0.5.0 it pulls **global surface currents** — NASA PODAAC OSCAR v2.0 (daily, 1993–present, free Earthdata Login) and the CMEMS `global-physics-daily` preset (1/12°, free CMEMS account) — into the canonical `CurrentField` model. Since v0.7.0 it pulls **passive-microwave sea-ice concentration** from the NOAA/NSIDC Sea Ice Index (G02135 v4.0, keyless, 1978–present) into a companion `IceField` model. Since v0.8.0 it pulls **satellite-observed precipitation** from NASA GPM IMERG V07 (half-hourly, 0.1°, 2000–present, free Earthdata Login, Early/Late/Final latency tiers) into a companion `RainField` model.
 
 ## Data sources
 
@@ -17,6 +17,7 @@ Surface-current and water-temperature acquisition engine for surveying and remot
 | Copernicus ERA5 via CDS API (`reanalysis-era5-single-levels`) | Free CDS account | **Global atmosphere** | 0.25° (~28 km) | hourly reanalysis, 1940–present |
 | NASA PODAAC OSCAR v2.0 via Earthdata OPeNDAP | Free Earthdata Login | **Global ocean currents** | 0.25° (~28 km) | daily averages, 1993–present |
 | CMEMS global ocean physics (`global-physics-daily` preset) | Free CMEMS account | **Global ocean currents** | 1/12° (~9 km) | daily analysis+forecast |
+| NASA GPM IMERG V07 via GES DISC HTTPS | Free Earthdata Login | **Global precipitation** | 0.1° (~10 km) | half-hourly, 2000–present (Early/Late/Final runs) |
 
 Registered NOAA models include **GLOFS** (Great Lakes, 5 km, 60 h), **LMHOFS** (Lake Michigan/Huron, 50 m–2.5 km, 120 h — the source of the Lake Michigan reel), LEOFS, CBOFS, DBOFS, GoMOFS, WCOFS, NGOFS2, SFBOFS, TBOFS, CIOFS, CREOFS, SSCOFS. Full table in `docs/DATA_SOURCES.md`.
 
@@ -28,6 +29,7 @@ pip install "survey-currents[noaa]"          # NetCDF parsing (xarray/netCDF4)
 pip install "survey-currents[s3]"            # faster S3 via boto3 (optional)
 pip install "survey-currents[cmems]"         # Copernicus Marine toolbox
 pip install "survey-currents[raster]"        # GeoTIFF/COG export (rasterio)
+pip install "survey-currents[imerg]"         # IMERG HDF5 parsing (h5py)
 pip install "survey-currents[full]"          # everything
 ```
 
@@ -143,6 +145,11 @@ survey-currents currents-synthetic --nt 4 --out currents_demo
 survey-currents fetch-firms --bbox -125,32,-114,42 \
     --start 2024-08-01 --end 2024-08-07 --instruments VIIRS_SNPP --out ca_fires
 survey-currents fires-synthetic --n 60 --out fires_demo
+# NASA GPM IMERG precipitation needs a free Earthdata Login:
+# export EARTHDATA_USERNAME=... EARTHDATA_PASSWORD=...
+survey-currents fetch-imerg --bbox=-125,25,-66,49 \
+    --start 2024-01-01 --end 2024-01-07 --run late --out conus_rain
+survey-currents rain-synthetic --out rain_demo
 ```
 
 ## The canonical model
@@ -188,6 +195,13 @@ Daily sea-ice concentration converges on `IceField` (`src/currents/sea_ice.py`):
 - `select_time()`, `select_bbox()`, JSON round-trip, `IceField.synthetic()`; provenance carries the exact file URLs, per-file SHA-256, reprojection method, and retrieval timestamp
 - CLI: `fetch-nsidc`, `ice-synthetic`
 
+Daily satellite precipitation converges on `RainField` (`src/currents/imerg.py`):
+
+- Gridded rates/totals: `times`/`lats`/`lons`/`values` on a regular lat/lon grid; mm/hr for `accumulate="native"` (48 half-hourly steps/day), mm/day for `accumulate="daily"` (default)
+- `fetch_imerg(bbox, start, end, accumulate="daily", run="late", stride_days=1)` — downloads the GPM IMERG V07 half-hourly HDF5 granules over **authenticated HTTPS** (free Earthdata Login; verified live 2026-09-27 — OPeNDAP catalog/`.dds`/`.das` metadata are keyless, data download 302s to URS), subsets to the bbox locally, and accumulates; runs: `early` (~4 h), `late` (~14 h, default), `final` (~3.5 months, gauge-adjusted); record 2000-06-01–present; 404 granules skipped with a `skipped_slots` provenance note and per-day `{"expected": 48, "retrieved": n}` coverage
+- `select_time()`, `select_bbox()`, JSON round-trip, `RainField.synthetic()`; provenance carries the exact download URLs, per-file SHA-256, run, accumulation mode, and retrieval timestamp
+- CLI: `fetch-imerg`, `rain-synthetic`
+
 ## Interoperability
 
 - **survey-monitor**: `CurrentsPassProvider` in `currents/interop.py` implements the `PassProvider` interface (`list_passes`/`metrics`) — each forecast hour becomes a monitored pass with `speed_mean`/`u_mean`/`v_mean`/`temp_mean` metrics.
@@ -207,6 +221,7 @@ src/currents/
     currents_global.py  # NASA PODAAC OSCAR v2.0 + CMEMS global-physics-daily currents
     fires.py       # NASA FIRMS active-fire detections (area API) -> FireField + density grids
     sea_ice.py     # NSIDC G02135 v4.0 daily sea-ice concentration (keyless HTTPS) -> IceField
+    imerg.py       # NASA GPM IMERG V07 half-hourly precipitation (Earthdata HTTPS) -> RainField
     cmems.py       # copernicusmarine subset wrapper + parser
     convert.py     # per-timestep 4-band GeoTIFF/COG export
     provenance.py  # SHA-256 provenance sidecars

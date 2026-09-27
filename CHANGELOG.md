@@ -4,6 +4,49 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.0] - 2026-09-27
+
+### Added
+- NASA GPM IMERG precipitation adapter (`src/currents/imerg.py`):
+  `fetch_imerg(bbox, start, end, accumulate="daily", run="late",
+  stride_days=1)` -> `RainField`. **Verified live 2026-09-27:**
+  the V07 half-hourly granules live under
+  `https://gpm1.gesdisc.eosdis.nasa.gov/opendap/GPM_L3/{GPM_3IMERGHH.07,
+  GPM_3IMERGHHE.07, GPM_3IMERGHHL.07}/{YYYY}/{DOY}/` with filenames like
+  `3B-HHR[-E|-L].MS.MRG.3IMERG.{YYYYMMDD}-S{HHMMSS}-E{HHMMSS}.{HHMM}.V07B.HDF5`
+  (Early/Late carry the `-E`/`-L` infix); the on-wire HDF5 dataspace is
+  `(time=1, lon=3600, lat=1800)` per the `.dds`/`.das`, units mm/hr,
+  `_FillValue` ≈ -9999.9, 0.1° global grid; lat/lon axes are resolved
+  from the actual `Grid/lat`/`Grid/lon` vector sizes (honest `ValueError`
+  on layout drift, never a silent transpose). OPeNDAP catalog and
+  `.dds`/`.das` metadata are **keyless**, but data download redirects
+  (302 → 401) to a free Earthdata Login — the adapter authenticates via
+  `EARTHDATA_USERNAME`/`EARTHDATA_PASSWORD` (or `.netrc`) exactly like
+  the MUR path and raises `CredentialsMissing` otherwise.
+  - Three latency runs: `early` (~4 h, `IMERGHHE`), `late` (~14 h,
+    `IMERGHHL`, the default), `final` (~3.5 months, `IMERGHH`,
+    gauge-adjusted); the documented V07 record starts 2000-06-01 for
+    all three runs (TRMM June 2000 - May 2014, GPM June 2014 - present;
+    enforced per run with honest errors). The live CMR archive shows
+    V07 reprocessing reaching 1998-01-01 for Early/Final, but the
+    adapter keeps the documented floor.
+  - `accumulate="daily"` (default) sums the 48 half-hourly mm/hr rates
+    into mm/day totals (rate × 0.5 h per slot; NaN treated as 0 for that
+    slot, all-NaN days stay NaN); `accumulate="native"` keeps the 48
+    half-hourly mm/hr rate steps. Incomplete days accumulate the slots
+    that were retrieved and record
+    `provenance["day_coverage"][day] = {"expected": 48, "retrieved": n}`;
+    404 granules are skipped with a `skipped_slots` note; an empty
+    fetch raises instead of returning an empty field.
+  - `RainField`: gridded `times`/`lats`/`lons`/`values` (mm/day or
+    mm/hr), `select_time`/`select_bbox`, JSON round-trip, deterministic
+    `synthetic()`, per-file SHA-256 provenance with exact download
+    URLs, retrieval timestamp, run, and accumulation mode; antimeridian
+    bboxes wrap into two index windows and come back sorted -180..180.
+  - CLI: `fetch-imerg`, `rain-synthetic`.
+  - New `imerg` extra: `pip install "survey-currents[imerg]"` (h5py);
+    also included in `full`. The engine core stays stdlib+numpy.
+
 ## [0.7.0] - 2026-09-26
 
 ### Added

@@ -4,6 +4,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.15.1] - 2026-09-27
+
+### Fixed
+- USGS earthquakes adapter: start `limit`/`offset` paging at `offset=1`.
+  The ComCat FDSN event service (v2.7.0) rejects `offset=0` with
+  HTTP 400 ("Bad offset value \"0\". Valid values are 1 <= offset"),
+  which broke every earthquake fetch, including
+  `"earthquakes in Japan over the past 10 years"` in reel-studio.
+  Verified live: the Japan 7-day M4+ query now returns events.
+  Added `test_fetch_offsets_are_one_based` regression test.
+
 ## [0.15.0] - 2026-09-27
 
 ### Added

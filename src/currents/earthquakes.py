@@ -670,7 +670,10 @@ def _fetch_window(bbox: Sequence[float], d0: _dt.date, d1: _dt.date,
                 page_provs + left[3] + right[3])
 
     events: List[Dict[str, Any]] = []
-    offset = 0
+    # ComCat FDSN offsets are 1-based: the service rejects offset=0 with
+    # HTTP 400 ("Valid values are 1 <= offset", verified live
+    # 2026-09-27 against service v2.7.0).
+    offset = 1
     while True:
         qurl = event_query_url(bbox, d0, d1, min_magnitude, event_type,
                                limit=min(page_size, COMCAT_FDSN_LIMIT),
@@ -688,7 +691,7 @@ def _fetch_window(bbox: Sequence[float], d0: _dt.date, d1: _dt.date,
         if len(page_events) < min(page_size, COMCAT_FDSN_LIMIT):
             break
         offset += len(page_events)
-        if offset >= total:
+        if offset > total:
             break
     return events, n_malformed, request_urls, page_provs
 

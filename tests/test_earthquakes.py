@@ -123,13 +123,15 @@ def _mock_comcat(monkeypatch, tmp_path, geojson=None, fixed_count=None,
             return small_body, {"url": url, "cache_hit": False,
                                 "downloaded": True, "sha256": "x" * 64}
         # Page fixture honoring limit/offset against the window total,
-        # like the real API (last page is short).
+        # like the real API (last page is short). The real service's
+        # offsets are 1-based: offset=1 returns the first event.
         total = (fixed_count if fixed_count is not None
                  else count_per_day * ((d1 - d0).days + 1))
         limit = int(q.get("limit", 20000))
-        offset = int(q.get("offset", 0))
-        remaining = max(0, total - offset)
-        body = _page_fixture(min(limit, remaining), offset, d0, d1)
+        offset = int(q.get("offset", 1))
+        first = offset - 1  # 1-based offset -> 0-based index
+        remaining = max(0, total - first)
+        body = _page_fixture(min(limit, remaining), first, d0, d1)
         return body, {"url": url, "cache_hit": False, "downloaded": True,
                       "sha256": "x" * 64}
 
@@ -365,11 +367,26 @@ def test_fetch_mocked_paginates(monkeypatch, tmp_path):
                           page_size=2000, cache_dir=str(tmp_path))
     page_urls = [u for u in calls if "format=geojson" in u]
     assert len(page_urls) == 3  # 2000 + 2000 + 501
-    assert "offset=2000" in page_urls[1]
-    assert "offset=4000" in page_urls[2]
+    assert "offset=1" in page_urls[0]
+    assert "offset=2001" in page_urls[1]
+    assert "offset=4001" in page_urls[2]
     assert f.provenance["n_events_parsed"] == 4501
     assert f.provenance["n_events_duplicates"] == 0
     assert len(f) == 4501
+
+
+def test_fetch_offsets_are_one_based(monkeypatch, tmp_path):
+    # Regression: the ComCat FDSN service rejects offset=0 with
+    # HTTP 400 ("Valid values are 1 <= offset"). The adapter must
+    # never request it — verified live against service v2.7.0.
+    calls = _mock_comcat(monkeypatch, tmp_path, count_per_day=643)
+    fetch_earthquakes(BBOX, "2026-01-01", "2026-01-07",
+                      page_size=2000, cache_dir=str(tmp_path))
+    page_urls = [u for u in calls if "format=geojson" in u]
+    assert page_urls, "expected at least one paged query"
+    for u in page_urls:
+        q = dict(urllib.parse.parse_qsl(urllib.parse.urlsplit(u).query))
+        assert int(q["offset"]) >= 1, f"offset must be 1-based: {u}"
 
 
 def test_fetch_mocked_empty_field(monkeypatch, tmp_path):

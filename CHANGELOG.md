@@ -4,6 +4,48 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.0] - 2026-09-26
+
+### Added
+- NASA FIRMS active-fire adapter (`src/currents/fires.py`):
+  `fetch_firms(bbox, start, end, instruments=("VIIRS_SNPP",))` ->
+  `FireField`. **Verified live 2026-09-26:** the area API shape is
+  `https://firms.modaps.eosdis.nasa.gov/api/area/csv/{MAP_KEY}/{PRODUCT}/{W},{S},{E},{N}/{DAY_RANGE}/{DATE}`
+  (DAY_RANGE 1–5 with a DATE start), and a free MAP_KEY is **required**
+  (request at https://firms.modaps.eosdis.nasa.gov/api/map_key/; a bad
+  key returns `Invalid MAP_KEY.`). Without a key, `CredentialsMissing`
+  explains the setup (same pattern as the MUR/ERA5 adapters).
+  - Per-date latency-tier picking via the pure, offline-testable
+    `firms_product_for` (dates within 60 days of today -> `*_NRT`;
+    older -> `*_SP`): `VIIRS_SNPP_NRT/_SP` (2012–present, 375 m),
+    `VIIRS_NOAA20_NRT/_SP` (2018–present), `VIIRS_NOAA21_NRT/_SP`
+    (2023–present), `MODIS_NRT/_SP` (Nov 2000–present). Long ranges
+    loop in <=5-day windows (`firms_window_chunks`); antimeridian
+    boxes split into two requests; seam duplicates dropped.
+  - Both CSV schemas parsed (VIIRS `bright_ti4` + letter confidence;
+    MODIS `brightness`/`bright_t31` + numeric confidence), normalized
+    to brightness (K), FRP (MW), confidence, satellite, instrument,
+    day/night. API error payloads raise `ValueError` with the API's
+    message.
+  - `FireField`: point-detection model (parallel `times`/`lats`/`lons`
+    + `brightness`/`frp`/`confidence`/`satellite`/`instrument`/
+    `daynight`), `select_time`/`select_bbox`, JSON round-trip,
+    deterministic `synthetic()` fixture. `to_density_grid(resolution,
+    frp_weighted)` bins detections into daily fire-count (or
+    FRP-weighted MW) grids — the plain `times`/`lats`/`lons`/`values`
+    dict `survey-viz` renders with zero changes.
+  - Provenance: the MAP_KEY is **never stored** — request URLs are
+    recorded with a `<redacted>` placeholder, plus per-request SHA-256,
+    retrieval timestamp, products used, and request count.
+  - CLI: `fetch-firms`, `fires-synthetic`.
+- 40 new fully-offline tests (`tests/test_fires.py`: sample VIIRS/MODIS
+  CSV fixtures, faked HTTP, explicit `today` for the tiering rule).
+
+### Docs
+- `docs/DATA_SOURCES.md` §8 (FIRMS endpoint, key setup, product
+  families, operational notes), README (FireField model, CLI examples,
+  layout), CHANGELOG.
+
 ## [0.5.0] - 2026-09-26
 
 ### Added

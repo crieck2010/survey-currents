@@ -139,6 +139,10 @@ survey-currents fetch-oscar --bbox -81,25,-55,43 \
 survey-currents fetch-cmems-currents --bbox -81,25,-55,43 \
     --start 2024-01-01 --end 2024-01-31 --out gulfstream_cmems
 survey-currents currents-synthetic --nt 4 --out currents_demo
+# NASA FIRMS active fires need a free MAP_KEY: export FIRMS_MAP_KEY=...
+survey-currents fetch-firms --bbox -125,32,-114,42 \
+    --start 2024-08-01 --end 2024-08-07 --instruments VIIRS_SNPP --out ca_fires
+survey-currents fires-synthetic --n 60 --out fires_demo
 ```
 
 ## The canonical model
@@ -170,6 +174,13 @@ Atmospheric reanalysis converges on `Era5Field` (`src/currents/era5.py`):
 - `spatial_mean()`, `select_time()`, `select_bbox()`, JSON round-trip, `Era5Field.synthetic()`
 - `fetch_era5(variables, bbox, start, end, stride_hours=6)` via `cdsapi` (lazy import, free CDS account); requests chunked by calendar month; provenance carries the CDS request dicts, SHA-256, and retrieval timestamp
 
+Active-fire detections converge on `FireField` (`src/currents/fires.py`):
+
+- Point detections: `times`/`lats`/`lons` plus `brightness` (K), `frp` (MW), `confidence`, `satellite`, `instrument`, `daynight`
+- `fetch_firms(bbox, start, end, instruments=("VIIRS_SNPP",))` via the NASA FIRMS area API (free MAP_KEY, `FIRMS_MAP_KEY` env; verified live 2026-09-26); requests looped in ≤5-day windows with per-date NRT/SP product tiering (`firms_product_for`, pure and offline-testable); antimeridian boxes split
+- `to_density_grid(resolution=0.25, frp_weighted=False)` bins detections into daily fire-count (or FRP-weighted MW) grids — the plain `times`/`lats`/`lons`/`values` dict `survey-viz` renders with zero changes
+- `select_time()`, `select_bbox()`, JSON round-trip, `FireField.synthetic()`; provenance carries the key-**redacted** request URLs, per-request SHA-256, and retrieval timestamp (the MAP_KEY is never stored)
+
 ## Interoperability
 
 - **survey-monitor**: `CurrentsPassProvider` in `currents/interop.py` implements the `PassProvider` interface (`list_passes`/`metrics`) — each forecast hour becomes a monitored pass with `speed_mean`/`u_mean`/`v_mean`/`temp_mean` metrics.
@@ -187,6 +198,7 @@ src/currents/
     sst_global.py  # NOAA OISST v2.1 + NASA JPL MUR v4.1 global SST
     era5.py        # Copernicus ERA5 hourly reanalysis (wind/msl/t2m/tp) via cdsapi
     currents_global.py  # NASA PODAAC OSCAR v2.0 + CMEMS global-physics-daily currents
+    fires.py       # NASA FIRMS active-fire detections (area API) -> FireField + density grids
     cmems.py       # copernicusmarine subset wrapper + parser
     convert.py     # per-timestep 4-band GeoTIFF/COG export
     provenance.py  # SHA-256 provenance sidecars

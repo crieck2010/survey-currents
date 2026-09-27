@@ -211,6 +211,31 @@ def cmd_currents_synthetic(a: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_fetch_firms(a: argparse.Namespace) -> int:
+    from .fires import fetch_firms
+    instruments = [i.strip() for i in a.instruments.split(",") if i.strip()]
+    field = fetch_firms(_parse_bbox(a.bbox), a.start, a.end,
+                        instruments=instruments)
+    path = f"{a.out.rstrip('/')}.json"
+    field.to_json(path)
+    print(f"fetched {len(field)} FIRMS active-fire detections -> {path}")
+    print(f"source={field.source} bounds={field.bounds}")
+    print(f"products_used={field.provenance.get('products_used')}")
+    print(f"n_requests={field.provenance.get('n_requests')}")
+    return 0
+
+
+def cmd_fires_synthetic(a: argparse.Namespace) -> int:
+    from .fires import FireField
+    field = FireField.synthetic(bbox=_parse_bbox(a.bbox), start=a.start,
+                                end=a.end, n=a.n, seed=a.seed,
+                                source=a.source)
+    path = f"{a.out.rstrip('/')}.json"
+    field.to_json(path)
+    print(f"wrote synthetic FIRMS field ({len(field)} detections) -> {path}")
+    return 0
+
+
 def cmd_sst_synthetic(a: argparse.Namespace) -> int:
     from .sst_global import SstField
     field = SstField.synthetic(nt=a.nt, seed=a.seed, source=a.source)
@@ -381,6 +406,32 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--seed", type=int, default=13)
     s.add_argument("--out", default="currents_synthetic", help="output path prefix")
     s.set_defaults(func=cmd_currents_synthetic)
+
+    s = sub.add_parser("fetch-firms",
+                       help="fetch NASA FIRMS active-fire detections "
+                            "(needs network + free FIRMS MAP_KEY)")
+    s.add_argument("--bbox", required=True, help="min_lon,min_lat,max_lon,max_lat "
+                   "(conventional -180..180; antimeridian-crossing boxes wrap)")
+    s.add_argument("--start", required=True, help="start date YYYY-MM-DD")
+    s.add_argument("--end", required=True, help="end date YYYY-MM-DD")
+    s.add_argument("--instruments", default="VIIRS_SNPP",
+                   help="comma-separated: VIIRS_SNPP,VIIRS_NOAA20,"
+                        "VIIRS_NOAA21,MODIS (default VIIRS_SNPP)")
+    s.add_argument("--out", default="firms_fires", help="output path prefix")
+    s.set_defaults(func=cmd_fetch_firms)
+
+    s = sub.add_parser("fires-synthetic",
+                       help="write deterministic synthetic FIRMS detections (offline)")
+    s.add_argument("--bbox", default="-125.0,32.0,-114.0,42.0",
+                   help="min_lon,min_lat,max_lon,max_lat")
+    s.add_argument("--start", default="2024-08-01", help="start date YYYY-MM-DD")
+    s.add_argument("--end", default="2024-08-07", help="end date YYYY-MM-DD")
+    s.add_argument("--n", type=int, default=60, help="detection count")
+    s.add_argument("--seed", type=int, default=7)
+    s.add_argument("--source", default="synthetic",
+                   help="source label recorded on the field")
+    s.add_argument("--out", default="fires_synthetic", help="output path prefix")
+    s.set_defaults(func=cmd_fires_synthetic)
     return p
 
 

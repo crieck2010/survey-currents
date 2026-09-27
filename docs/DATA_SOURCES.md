@@ -344,6 +344,32 @@ Notes:
   Login. NOMADS OPeNDAP is retired (Service Change Notice 25-81) and is
   not used. Both corrections are recorded in OSCAR provenance.
 
+## 8. NASA FIRMS — global active-fire detections (free MAP_KEY)
+
+Fire Information for Resource Management System: thermal-anomaly
+detections from MODIS (Terra/Aqua, 1 km, Nov 2000–present) and VIIRS
+(Suomi-NPP / NOAA-20 / NOAA-21, 375 m, 2012/2018/2023–present).
+
+| Item | Value |
+|---|---|
+| API | `https://firms.modaps.eosdis.nasa.gov/api/area/csv/{MAP_KEY}/{PRODUCT}/{W},{S},{E},{N}/{DAY_RANGE}/{DATE}` |
+| Auth | **Free MAP_KEY required** — request at https://firms.modaps.eosdis.nasa.gov/api/map_key/; export as `FIRMS_MAP_KEY` (verified live 2026-09-26: a bad key returns `Invalid MAP_KEY.`) |
+| Window | `DAY_RANGE` 1–5 days with a `DATE` start; longer ranges are looped by the engine |
+| Products | Per-instrument latency tiers picked per date by the pure, offline-testable `firms_product_for` (dates within 60 days of today → `*_NRT`; older → `*_SP`): `VIIRS_SNPP_NRT/_SP`, `VIIRS_NOAA20_NRT/_SP`, `VIIRS_NOAA21_NRT/_SP`, `MODIS_NRT/_SP` |
+| Record | VIIRS columns `latitude,longitude,bright_ti4,bright_ti5,frp,scan,track,acq_date,acq_time,satellite,instrument,confidence,version,daynight`; MODIS columns `latitude,longitude,brightness,…,bright_t31,frp,daynight` (numeric confidence) — both parsed by `currents.fires` |
+| Model | `FireField` (point detections) → `to_density_grid(resolution=0.25)` bins detections into daily fire-count (or FRP-weighted MW) grids — the plain `times`/`lats`/`lons`/`values` dict `survey-viz` renders |
+
+Operational notes:
+
+- The MAP_KEY is **never stored** in provenance, logs, or error messages —
+  stored request URLs carry a `<redacted>` placeholder, and the
+  provenance record keeps `map_key: "<redacted>"`.
+- Antimeridian-crossing bboxes are split into two area-API requests.
+- Active-fire *detections* only: FIRMS says "something hot is here now",
+  not how much area burned. Burned-area / burn-severity mapping is the
+  `survey-burn` module's domain (satellite imagery) — see the
+  `survey-viz` parser's honest refusal for "burn scar" phrases.
+
 ## Choosing a source
 
 - **US Great Lakes / coasts, no signup:** NOAA OFS (LMHOFS for Lake

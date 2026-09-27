@@ -471,9 +471,8 @@ Operational notes:
   `ValueError` naming the future work instead of silently misbehaving.
 - Each fetch downloads **one HDF5 tile per (day, tile)** (~tens of MB
   each, ~384 tiles/day globally) and mosaics locally — keep windows and
-  bboxes tight, or use `stride_days` for sampling. Night lights change
-  slowly, so `survey-viz` defaults `night-lights` specs to monthly
-  cadence (one sampled day per month).
+  bboxes tight, or use `stride_days` for sampling. `survey-viz` parses
+  night-lights descriptions to daily cadence (one frame per day).
 - HDF5 parsing needs `h5py`: `pip install "survey-currents[blackmarble]"`
   (also in the `full` extra). The engine core stays stdlib+numpy.
 - A single-epoch Black Marble map is **not a change-detection product**:

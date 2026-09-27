@@ -21,6 +21,7 @@ Surface-current and water-temperature acquisition engine for surveying and remot
 | NASA Black Marble VNP46A2 V002 via LAADS DAAC | Free Earthdata Login | **Global night lights** | 15″ native, 0.05° default output | daily DNB radiance, 2012–present |
 | GEBCO 2024 via BODC/CEDA open download (per-tile ranged extraction) | No signup | **Global topography/bathymetry** | 15″ native; block-averaged outputs | static 2024 compilation |
 | Natural Earth via anonymous S3 | No signup | **Global coastline/country vectors** | 110m/50m/10m cartographic scales | static |
+| NOAA IBTrACS v04r01 via NCEI HTTPS (download-once, cached) | No signup | **Global tropical-cyclone best tracks** | 3-hourly fixes | 1980–present (1842– with `--full-archive`) |
 
 Registered NOAA models include **GLOFS** (Great Lakes, 5 km, 60 h), **LMHOFS** (Lake Michigan/Huron, 50 m–2.5 km, 120 h — the source of the Lake Michigan reel), LEOFS, CBOFS, DBOFS, GoMOFS, WCOFS, NGOFS2, SFBOFS, TBOFS, CIOFS, CREOFS, SSCOFS. Full table in `docs/DATA_SOURCES.md`.
 
@@ -159,6 +160,10 @@ survey-currents fetch-gebco --bbox=-125,25,-66,49 --resolution 0.25 \
 survey-currents fetch-naturalearth --bbox=-125,25,-66,49 \
     --scale 110m --layers coastline,countries --out conus_ne
 survey-currents basemaps-synthetic --out topo_demo
+# NOAA IBTrACS tropical-cyclone best tracks (no account):
+survey-currents fetch-ibtracs --bbox=-100,10,-60,40 \
+    --start 2024-08-01 --end 2024-11-30 --storm-name milton --out milton
+survey-currents storms-synthetic --out storms_demo
 ```
 
 ## The canonical model

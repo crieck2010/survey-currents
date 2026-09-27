@@ -4,6 +4,38 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.11.0] - 2026-09-27
+
+### Added
+- NOAA IBTrACS v4 tropical-cyclone best-track adapter
+  (`src/currents/storms.py`): `fetch_ibtracs(bbox, start, end,
+  min_wind=None, storm_name=None, full_archive=False)` -> `StormField`
+  (list of `StormTrack`: time, lat/lon, max sustained wind in kt,
+  min central pressure in hPa, storm name, SID, basin). **Verified
+  live 2026-09-27:** keyless NCEI HTTPS
+  `https://www.ncei.noaa.gov/data/international-best-track-archive-for-climate-stewardship-ibtracs/v04r01/access/netcdf/`;
+  `IBTrACS.since1980.v04r01.nc` (~10.8 MB, 1980–present, default) and
+  `IBTrACS.ALL.v04r01.nc` (~23.4 MB, 1842–present) are NetCDF-4/HDF5
+  (storm dim 4991, 360 fix slots; time units days since 1858-11-17;
+  longitudes mixed 0..360 / -180..180). Per-fix wind priority
+  `usa_wind` then `wmo_wind`, pressure `usa_pres` then `wmo_pres`
+  (integer fill -9999). `ensure_ibtracs_file()`: download-once,
+  atomic writes, SHA-256 sidecars verified on every hit,
+  corruption-triggered redownload, `Last-Modified`-based stale-file
+  revalidation (the archive is republished as storms are added),
+  `refresh=True` forces re-download. Longitudes normalized to
+  [-180, 180); storms kept when any fix falls in bbox, fixes clipped
+  to `[start, end]`, `min_wind` filters by lifetime max sustained
+  wind, `storm_name` selects one named storm (case-insensitive).
+  `StormField` has `rank_by_intensity()`, `select_time`,
+  `select_bbox`, JSON round-trips, and a deterministic `synthetic()`.
+  Documented Saffir-Simpson mapping (TD <34, TS 34–63, C1 64–82,
+  C2 83–95, C3 96–112, C4 113–136, C5 ≥137 kt) with per-category
+  render colors. CLI: `fetch-ibtracs`, `storms-synthetic`.
+  Docs: `docs/DATA_SOURCES.md` §13.
+- 42 tests in `tests/test_storms.py` (41 offline, 1 live Katrina-2005
+  verification skipped unless `SURVEY_CURRENTS_LIVE=1`).
+
 ## [0.10.0] - 2026-09-27
 
 ### Added

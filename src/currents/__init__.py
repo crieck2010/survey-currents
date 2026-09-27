@@ -17,7 +17,7 @@ the ``pip install`` extra.
 
 from __future__ import annotations
 
-__version__ = "0.10.0"
+__version__ = "0.11.0"
 
 from .basemaps import (GEBCO_NATIVE_ARCSEC, GEBCO_VERSION, GEBCO_ZIP_URL,
                        NATURAL_EARTH_LAYERS, NATURAL_EARTH_SCALES, TopoField,
@@ -65,6 +65,12 @@ from .sea_ice import (HUGHES_A, HUGHES_E2, NSIDC_BASE, NSIDC_CELL_M,
                        ps_forward, read_concentration_geotiff,
                        reproject_to_latlon, resolve_native_grid, target_grid,
                        validate_ice_bbox)
+from .storms import (IBTRACS_ALL_FILE, IBTRACS_NC_DIR,
+                     IBTRACS_SINCE1980_FILE, IBTRACS_START_ALL,
+                     IBTRACS_START_SINCE1980, IBTRACS_VERSION, SSHS_CATEGORIES,
+                     SSHS_COLORS, SSHS_LABELS, StormField, StormTrack,
+                     ensure_ibtracs_file, fetch_ibtracs, ibtracs_filename,
+                     ibtracs_url, sshs_category, storm_cache_dir)
 
 __all__ = [
     "CurrentField",
@@ -93,6 +99,23 @@ __all__ = [
     "nsidc_conc_url",
     "pick_hemisphere",
     "validate_ice_bbox",
+    "StormField",
+    "StormTrack",
+    "fetch_ibtracs",
+    "ensure_ibtracs_file",
+    "ibtracs_url",
+    "ibtracs_filename",
+    "storm_cache_dir",
+    "sshs_category",
+    "IBTRACS_VERSION",
+    "IBTRACS_NC_DIR",
+    "IBTRACS_SINCE1980_FILE",
+    "IBTRACS_ALL_FILE",
+    "IBTRACS_START_SINCE1980",
+    "IBTRACS_START_ALL",
+    "SSHS_CATEGORIES",
+    "SSHS_COLORS",
+    "SSHS_LABELS",
     "decode_concentration",
     "read_concentration_geotiff",
     "reproject_to_latlon",

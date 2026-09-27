@@ -510,6 +510,35 @@ Operational notes:
   `survey-viz` keeps them as an underlay and refuses "country borders"
   alone with an honest no-product response.
 
+## 13. NOAA IBTrACS v4 — global tropical-cyclone best tracks (no account)
+
+The canonical global best-track archive of tropical and subtropical
+storms (IBTrACS v04r01, `since1980` subset 1980–present plus the full
+1842–present `ALL` file). No account, keyless HTTPS from NCEI. The
+adapter downloads the archive NetCDF once and subsets locally.
+
+| Item | Value |
+|---|---|
+| Directory | `https://www.ncei.noaa.gov/data/international-best-track-archive-for-climate-stewardship-ibtracs/v04r01/access/netcdf/` — verified live 2026-09-27: anonymous HTTPS, `Accept-Ranges: bytes` |
+| Files | `IBTrACS.since1980.v04r01.nc` (~10.8 MB, default) and `IBTrACS.ALL.v04r01.nc` (~23.4 MB, `--full-archive`); NetCDF-4/HDF5. Storm dimension 4991, per-storm fix slots 360; fixes nominally 3-hourly but cadence varies by agency/era |
+| Fix variables | `usa_wind` → `wmo_wind` (kt, 1-min sustained), `usa_pres` → `wmo_pres` (hPa), `lat`, `lon`, `iso_time`, `sid`, `name`, `season`, `basin`, `usa_sshs`; integer fill −9999, `usa_sshs` fill −15 |
+| Access pattern | `ensure_ibtracs_file()` — download-once, atomic write, SHA-256 sidecar verified on every hit, corruption-triggered redownload, stale-file `Last-Modified` revalidation (the archive is republished as storms are added), `refresh=True` forces re-download |
+| Query | `fetch_ibtracs(bbox, start, end, min_wind=None, storm_name=None, full_archive=False)` — storms kept when ≥1 fix falls in bbox; fixes clipped to `[start, end]`; `min_wind` filters by lifetime max sustained wind (kt); `storm_name` selects one named storm (case-insensitive exact) |
+| Dateline | Longitudes normalized to [−180, 180); tracks keep continuous values; renderers must break polylines on |Δlon| > 180° |
+| Provenance | IBTrACS version, file URL, SHA-256, subset parameters, wind/pressure agency priority, `retrieved_at`, cache-hit flag |
+| Model | `StormField` (`StormTrack` list) — `rank_by_intensity()`, `select_time`, `select_bbox`, `to_dict`/`from_dict`, `to_json`/`from_json`, deterministic `synthetic()` (includes a `TESTALPHA` track) |
+| CLI | `fetch-ibtracs --bbox … --start … --end … [--storm-name katrina] [--min-wind 100] [--full-archive]`, `storms-synthetic` |
+
+Operational notes:
+
+- Record bounds: the default file starts 1980-01-01 (a request before
+  that date raises and suggests `--full-archive`); the full file starts
+  1842-01-01.
+- Agency wind averaging conventions differ globally; Saffir-Simpson
+  categories are formally based on 1-minute winds, so category mapping
+  is most defensible against the USA-agency values — documented in
+  `docs/STORMS.md` on the `survey-viz` side.
+
 ## Choosing a source
 
 - **US Great Lakes / coasts, no signup:** NOAA OFS (LMHOFS for Lake
@@ -545,6 +574,13 @@ Operational notes:
   `global-physics-daily` preset wrapped as `fetch_cmems_currents`
   (1/12°, daily; `thetao` carried as-is).
 - **Any other coastline:** CMEMS global physics.
+- **Tropical-cyclone tracks, identity, and season rankings, no
+  signup:** NOAA IBTrACS v04r01 — 1980–present best tracks
+  (1842–present with `--full-archive`); the answer for named-storm
+  tracks, "strongest hurricanes of the season" rankings, and storm
+  identity. For the *ambient* storm-environment fields (wind and
+  pressure patterns around a storm), ERA5 remains the answer
+  (see `currents.storms`).
 - **Blending with satellites:** use `align_to_thermal_zone()` to compare
   model water temperature against survey-thermal Landsat LST passes over
   the same zone and window.

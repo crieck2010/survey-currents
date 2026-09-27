@@ -319,6 +319,32 @@ def cmd_lights_synthetic(a: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_fetch_ibtracs(a: argparse.Namespace) -> int:
+    from .storms import fetch_ibtracs
+    field = fetch_ibtracs(_parse_bbox(a.bbox), a.start, a.end,
+                          min_wind=a.min_wind, storm_name=a.storm_name,
+                          full_archive=a.full_archive)
+    path = f"{a.out.rstrip('/')}.json"
+    field.to_json(path)
+    print(f"fetched IBTrACS storm field ({len(field)} storms, "
+          f"{field.n_obs} fixes) -> {path}")
+    print(f"source={field.source} bounds={field.bounds}")
+    print(f"sha256={field.provenance.get('sha256')}")
+    return 0
+
+
+def cmd_storms_synthetic(a: argparse.Namespace) -> int:
+    from .storms import StormField
+    field = StormField.synthetic(bbox=_parse_bbox(a.bbox), start=a.start,
+                                 end=a.end, n_storms=a.n_storms,
+                                 seed=a.seed, source=a.source)
+    path = f"{a.out.rstrip('/')}.json"
+    field.to_json(path)
+    print(f"wrote synthetic IBTrACS storm field ({len(field)} storms, "
+          f"{field.n_obs} fixes) -> {path}")
+    return 0
+
+
 def cmd_sst_synthetic(a: argparse.Namespace) -> int:
     from .sst_global import SstField
     field = SstField.synthetic(nt=a.nt, seed=a.seed, source=a.source)
@@ -555,6 +581,38 @@ def build_parser() -> argparse.ArgumentParser:
                    help="source label recorded on the field")
     s.add_argument("--out", default="lights_synthetic", help="output path prefix")
     s.set_defaults(func=cmd_lights_synthetic)
+
+    s = sub.add_parser("fetch-ibtracs",
+                       help="fetch NOAA IBTrACS v4 tropical-cyclone best tracks "
+                            "(needs network; keyless NCEI HTTPS; file cached)")
+    s.add_argument("--bbox", required=True, help="min_lon,min_lat,max_lon,max_lat "
+                   "(conventional -180..180; antimeridian-crossing boxes wrap)")
+    s.add_argument("--start", required=True, help="start date YYYY-MM-DD "
+                   "(record starts 1980-01-01; 1842-01-01 with --full-archive)")
+    s.add_argument("--end", required=True, help="end date YYYY-MM-DD")
+    s.add_argument("--min-wind", type=float, default=None,
+                   help="keep storms whose lifetime max sustained wind "
+                        "reaches this many kt (default: all)")
+    s.add_argument("--storm-name", default=None,
+                   help="select one named storm, e.g. katrina (case-insensitive)")
+    s.add_argument("--full-archive", action="store_true",
+                   help="use the 1842-present IBTrACS.ALL file "
+                        "(default: 1980-present IBTrACS.since1980)")
+    s.add_argument("--out", default="ibtracs_storms", help="output path prefix")
+    s.set_defaults(func=cmd_fetch_ibtracs)
+
+    s = sub.add_parser("storms-synthetic",
+                       help="write a deterministic synthetic storm-track field (offline)")
+    s.add_argument("--bbox", default="-100.0,10.0,-60.0,40.0",
+                   help="min_lon,min_lat,max_lon,max_lat")
+    s.add_argument("--start", default="2024-08-01", help="start date YYYY-MM-DD")
+    s.add_argument("--end", default="2024-09-15", help="end date YYYY-MM-DD")
+    s.add_argument("--n-storms", type=int, default=3, help="storm count")
+    s.add_argument("--seed", type=int, default=7)
+    s.add_argument("--source", default="synthetic",
+                   help="source label recorded on the field")
+    s.add_argument("--out", default="storms_synthetic", help="output path prefix")
+    s.set_defaults(func=cmd_storms_synthetic)
 
     s = sub.add_parser("sst-synthetic",
                        help="write a deterministic synthetic global SST field (offline)")

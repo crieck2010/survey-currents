@@ -4,6 +4,43 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.12.0] - 2026-09-27
+
+### Added
+- CSR GRACE / GRACE-FO RL06.3 terrestrial water storage adapter
+  (`src/currents/grace.py`): `fetch_grace(bbox, start, end)` ->
+  `WaterField` (monthly terrestrial water storage anomalies, cm
+  liquid-water-equivalent thickness, land-only, 0.25° grid,
+  longitudes normalized to -180..180). **Verified live
+  2026-09-27:** keyless CSR HTTPS
+  `https://download.csr.utexas.edu/outgoing/grace/RL0603_mascons/`;
+  `CSR_GRACE_GRACE-FO_RL0603_Mascons_all-corrections.nc` (~107 MB,
+  258 months, 2002-04 – 2026-06, already gridded at 0.25° — no mascon
+  mapping needed; native mascon resolving power is coarser than the
+  0.25° output grid) and the separate
+  `CSR_GRACE_GRACE-FO_RL06_Mascons_v02_LandMask.nc` (~4 MB,
+  `LO_val` 0/1 on the same grid). Units are cm; the 2004–2009
+  time-mean has been removed (`time_mean_removed` attribute) so every
+  value is an anomaly against that baseline. `ensure_grace_files()`:
+  download-once into `$SURVEY_CURRENTS_CACHE/grace`, atomic writes,
+  SHA-256 sidecars verified on every hit, corruption-triggered
+  redownload, `Last-Modified`-based stale-file revalidation (CSR
+  re-releases the file as new months arrive), `refresh=True` forces
+  re-download. Months with no solution in the requested window become
+  all-NaN gap frames and are listed in `WaterField.gap_months` —
+  never interpolated, never silently dropped; gap detection diffs the
+  file's actual time axis against the calendar (the file's
+  `months_missing` attribute under-reports: 2011-11 and 2015-05 are
+  missing from the time axis but absent from the attribute — the 2017-07
+  … 2018-05 inter-mission gap plus 24 isolated months are all
+  handled). `WaterField` has `spatial_mean()`, `is_gap()`,
+  `select_time`, `select_bbox`, dict/JSON round-trips, and a
+  deterministic `synthetic()` fixture (drying trend + seasonal cycle,
+  ~35% ocean-masked cells, configurable gap months). netCDF4 stays
+  lazy/optional (pure parsing works over duck-typed datasets). CLI:
+  `fetch-grace` and `grace-synthetic`. 42 new offline tests (1 live
+  opt-in test guarded by `SURVEY_CURRENTS_LIVE=1`).
+
 ## [0.11.0] - 2026-09-27
 
 ### Added

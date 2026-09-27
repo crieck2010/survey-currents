@@ -319,6 +319,31 @@ def cmd_lights_synthetic(a: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_fetch_grace(a: argparse.Namespace) -> int:
+    from .grace import fetch_grace
+    field = fetch_grace(_parse_bbox(a.bbox), a.start, a.end)
+    path = f"{a.out.rstrip('/')}.json"
+    field.to_json(path)
+    print(f"fetched GRACE water-storage field ({len(field)} months, "
+          f"{field.n_gap_months} gap months) -> {path}")
+    print(f"source={field.source} units={field.units} bounds={field.bounds}")
+    print(f"baseline: {field.anomaly_baseline}")
+    print(f"sha256={field.provenance.get('solution_sha256')}")
+    return 0
+
+
+def cmd_grace_synthetic(a: argparse.Namespace) -> int:
+    from .grace import WaterField
+    field = WaterField.synthetic(bbox=_parse_bbox(a.bbox), start=a.start,
+                                 end=a.end, resolution=a.resolution,
+                                 seed=a.seed, source=a.source)
+    path = f"{a.out.rstrip('/')}.json"
+    field.to_json(path)
+    print(f"wrote synthetic GRACE water-storage field ({len(field)} months, "
+          f"{field.n_gap_months} gap months) -> {path}")
+    return 0
+
+
 def cmd_fetch_ibtracs(a: argparse.Namespace) -> int:
     from .storms import fetch_ibtracs
     field = fetch_ibtracs(_parse_bbox(a.bbox), a.start, a.end,
@@ -581,6 +606,33 @@ def build_parser() -> argparse.ArgumentParser:
                    help="source label recorded on the field")
     s.add_argument("--out", default="lights_synthetic", help="output path prefix")
     s.set_defaults(func=cmd_lights_synthetic)
+
+    s = sub.add_parser("fetch-grace",
+                       help="fetch CSR GRACE/GRACE-FO RL06.3 terrestrial water "
+                            "storage anomalies (needs network; keyless CSR "
+                            "HTTPS; files cached)")
+    s.add_argument("--bbox", required=True, help="min_lon,min_lat,max_lon,max_lat "
+                   "(conventional -180..180; antimeridian-crossing boxes wrap)")
+    s.add_argument("--start", required=True, help="start date YYYY-MM-DD "
+                   "(record starts 2002-04-01)")
+    s.add_argument("--end", required=True, help="end date YYYY-MM-DD")
+    s.add_argument("--out", default="grace_water", help="output path prefix")
+    s.set_defaults(func=cmd_fetch_grace)
+
+    s = sub.add_parser("grace-synthetic",
+                       help="write a deterministic synthetic water-storage "
+                            "field (offline)")
+    s.add_argument("--bbox", default="-125.0,30.0,-110.0,45.0",
+                   help="min_lon,min_lat,max_lon,max_lat")
+    s.add_argument("--start", default="2020-01-01", help="start date YYYY-MM-DD")
+    s.add_argument("--end", default="2020-12-01", help="end date YYYY-MM-DD")
+    s.add_argument("--resolution", type=float, default=2.5,
+                   help="synthetic grid resolution in degrees (default 2.5)")
+    s.add_argument("--seed", type=int, default=11)
+    s.add_argument("--source", default="synthetic",
+                   help="source label recorded on the field")
+    s.add_argument("--out", default="grace_synthetic", help="output path prefix")
+    s.set_defaults(func=cmd_grace_synthetic)
 
     s = sub.add_parser("fetch-ibtracs",
                        help="fetch NOAA IBTrACS v4 tropical-cyclone best tracks "

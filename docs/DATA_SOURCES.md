@@ -510,6 +510,40 @@ Operational notes:
   `survey-viz` keeps them as an underlay and refuses "country borders"
   alone with an honest no-product response.
 
+## 14. CSR GRACE / GRACE-FO RL06.3 — terrestrial water storage anomalies (no account)
+
+The canonical satellite-gravimetry record of total water storage over
+land (CSR mascon RL06.3). No account, keyless anonymous HTTPS from
+the University of Texas Center for Space Research. The adapter
+downloads two NetCDFs once and subsets locally.
+
+| Item | Value |
+|---|---|
+| Directory | `https://download.csr.utexas.edu/outgoing/grace/RL0603_mascons/` — verified live 2026-09-27: anonymous HTTPS, `Accept-Ranges: bytes`, `Last-Modified: 2026-08-24` |
+| Solution file | `CSR_GRACE_GRACE-FO_RL0603_Mascons_all-corrections.nc` (112,611,569 bytes); NetCDF-4/HDF5. `time`=258 months (2002-04 – 2026-06), `lat`/`lon`=720×1440 at 0.25°; main variable `lwe_thickness` in cm. The grid is already 0.25° — no mascon mapping needed — but the native mascon resolving power is coarser than 0.25°, so do not claim true 0.25° resolving power |
+| Land-mask file | `CSR_GRACE_GRACE-FO_RL06_Mascons_v02_LandMask.nc` (4,174,189 bytes, `Last-Modified: 2024-09-18`); variable `LO_val`, 0/1 on the same 720×1440 grid. The solution grid does **not** mask oceans itself (a Pacific sample held a valid number), so this file is mandatory: ocean cells are NaN |
+| Anomaly baseline | `time_mean_removed = "2004.000 to 2009.999"` — every value is an anomaly against the 2004–2009 time-mean; units cm liquid-water-equivalent thickness |
+| Access pattern | `ensure_grace_files()` — download-once into `$SURVEY_CURRENTS_CACHE/grace`, atomic writes, SHA-256 sidecars verified on every hit, corruption-triggered redownload, stale-file `Last-Modified` revalidation (CSR re-releases the file as new months arrive), `refresh=True` forces re-download |
+| Query | `fetch_grace(bbox, start, end)` — monthly frames in `[start, end]`; longitudes normalized 0..360 → −180..180 (antimeridian and prime-meridian-crossing bboxes handled as one or two windows on the 0..360 axis) |
+| Missing months | The file carries only observed solution months. Missing months are diffed from the file's actual time axis against the requested calendar — do **not** trust the file's `months_missing` attribute alone: it under-reports (2011-11 and 2015-05 are missing from the time axis but absent from the attribute). All 35 observed gaps (2017-07 … 2018-05 inter-mission gap plus 24 isolated months) become all-NaN frames listed in `WaterField.gap_months`; never interpolated, never silently dropped |
+| Provenance | Product/version (CSR GRACE and GRACE-FO MASCON RL06.3M), solution+mask URLs, SHA-256 digests, anomaly baseline, requested bbox/time range, gap months, cache-hit flag, `retrieved_at`, tool version |
+| Model | `WaterField` — `times` (month-start dates), `lats`, `lons` (−180..180 ascending), `values` (ntime, nlat, nlon) float; `gap_months`, `n_gap_months`, `is_gap()`, `spatial_mean()`, `select_time`, `select_bbox`, `to_dict`/`from_dict`, `to_json`/`from_json`, deterministic `synthetic()` (drying trend + seasonal cycle, ~35% ocean-masked cells, configurable gap months) |
+| CLI | `fetch-grace --bbox … --start … --end …`, `grace-synthetic` |
+| Optional dependency | netCDF4 is lazy/optional (the CSR archive is NetCDF-4/HDF5); parsing is pure over duck-typed datasets so tests and `synthetic()` work without it |
+
+Operational notes:
+
+- Record bounds: requests before 2002-04-01 raise; future end dates
+  raise. CSR publishes new months roughly monthly — the 30-day
+  `Last-Modified` revalidation keeps the cache current without
+  re-downloading the ~107 MB file on every call.
+- Interpretation: positive anomalies = wetter than the 2004–2009
+  mean (blue), negative = drier (brown); GRACE measures *total* water
+  storage (groundwater + soil moisture + snow + surface water), not
+  groundwater alone — say so in captions. The `survey-viz`
+  `water-storage` variable renders this field with a zero-centered
+  diverging colormap and marks gap months as "NO GRACE OBSERVATION".
+
 ## 13. NOAA IBTrACS v4 — global tropical-cyclone best tracks (no account)
 
 The canonical global best-track archive of tropical and subtropical
@@ -581,6 +615,15 @@ Operational notes:
   identity. For the *ambient* storm-environment fields (wind and
   pressure patterns around a storm), ERA5 remains the answer
   (see `currents.storms`).
+- **Terrestrial water storage / groundwater anomalies, no signup:**
+  CSR GRACE/GRACE-FO RL06.3 — monthly TWS anomalies in cm LWE,
+  2002–present, land-only; the answer for "water storage",
+  "groundwater", "aquifer", "drought", and "total water storage"
+  descriptions. For *rainfall/precipitation* use GPM IMERG or ERA5
+  (`tp`) — never GRACE. For river discharge or streamflow there is no
+  adapter yet (honest refusal; streamgages are item 11 of the
+  remote-sensing program). For sea level there is no adapter either —
+  it is a different observable from GRACE TWS.
 - **Blending with satellites:** use `align_to_thermal_zone()` to compare
   model water temperature against survey-thermal Landsat LST passes over
   the same zone and window.

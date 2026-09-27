@@ -17,7 +17,7 @@ the ``pip install`` extra.
 
 from __future__ import annotations
 
-__version__ = "0.11.0"
+__version__ = "0.12.0"
 
 from .basemaps import (GEBCO_NATIVE_ARCSEC, GEBCO_VERSION, GEBCO_ZIP_URL,
                        NATURAL_EARTH_LAYERS, NATURAL_EARTH_SCALES, TopoField,
@@ -65,6 +65,12 @@ from .sea_ice import (HUGHES_A, HUGHES_E2, NSIDC_BASE, NSIDC_CELL_M,
                        ps_forward, read_concentration_geotiff,
                        reproject_to_latlon, resolve_native_grid, target_grid,
                        validate_ice_bbox)
+from .grace import (GRACE_BASELINE, GRACE_EPOCH, GRACE_MASK_FILE,
+                     GRACE_MASK_URL, GRACE_MAX_CACHE_AGE_DAYS,
+                     GRACE_PRODUCT, GRACE_PRODUCT_VERSION, GRACE_RECORD_START,
+                     GRACE_SOLUTION_FILE, GRACE_SOLUTION_URL, GRACE_UNITS,
+                     WaterField, ensure_grace_files, fetch_grace,
+                     grace_cache_dir, grace_file_url)
 from .storms import (IBTRACS_ALL_FILE, IBTRACS_NC_DIR,
                      IBTRACS_SINCE1980_FILE, IBTRACS_START_ALL,
                      IBTRACS_START_SINCE1980, IBTRACS_VERSION, SSHS_CATEGORIES,
@@ -101,6 +107,22 @@ __all__ = [
     "validate_ice_bbox",
     "StormField",
     "StormTrack",
+    "WaterField",
+    "fetch_grace",
+    "ensure_grace_files",
+    "grace_cache_dir",
+    "grace_file_url",
+    "GRACE_PRODUCT",
+    "GRACE_PRODUCT_VERSION",
+    "GRACE_SOLUTION_FILE",
+    "GRACE_SOLUTION_URL",
+    "GRACE_MASK_FILE",
+    "GRACE_MASK_URL",
+    "GRACE_EPOCH",
+    "GRACE_RECORD_START",
+    "GRACE_BASELINE",
+    "GRACE_UNITS",
+    "GRACE_MAX_CACHE_AGE_DAYS",
     "fetch_ibtracs",
     "ensure_ibtracs_file",
     "ibtracs_url",

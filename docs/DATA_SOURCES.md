@@ -370,6 +370,44 @@ Operational notes:
   `survey-burn` module's domain (satellite imagery) — see the
   `survey-viz` parser's honest refusal for "burn scar" phrases.
 
+## 9. NSIDC G02135 v4.0 — global sea-ice concentration (no account)
+
+NOAA/NSIDC Sea Ice Index: daily passive-microwave sea-ice concentration,
+November 1978–present, both hemispheres.
+
+| Item | Value |
+|---|---|
+| Archive | `https://noaadata.apps.nsidc.org/NOAA/G02135/{north,south}/daily/geotiff/{YYYY}/{MM_Mon}/{N,S}_YYYYMMDD_concentration_v4.0.tif` |
+| Auth | **None — keyless anonymous HTTPS** (verified live 2026-09-26: directory listings and real files return HTTP 200 with no credentials) |
+| Grid | NSIDC polar stereographic, Hughes 1980 ellipsoid, 25 km — North EPSG:3411 (304×448), South EPSG:3412 (316×332) |
+| Encoding | Unsigned 16-bit; concentration scaled ×10 (divide by 10 → percent 0–100); 2510 = Arctic pole hole, 2530 = coast, 2540 = land, 2550 = missing → NaN |
+| Record | 1978-11-01–present; SMMR era (1978–1987) is every other day; no data 1987-12-03 → 1988-01-13 |
+| Model | `IceField` — regular lat/lon `times`/`lats`/`lons`/`values` (percent), flags masked as NaN, per-file provenance |
+
+Operational notes:
+
+- The engine reprojects the native grids onto the caller's lat/lon grid
+  with **nearest-neighbor** sampling (documented choice — it preserves
+  the 15%-threshold ice edge exactly; bilinear would smear it).
+  The formulas are verified against a live file: the pole maps to (0, 0)
+  m, i.e. pixel (154, 234) on the north grid, where the pole-hole flag
+  sits.
+- Missing days (SMMR off-days, the 1987/88 outage) are skipped with a
+  `provenance["skipped_days"]` note; if every day is missing the fetch
+  raises instead of returning an empty field.
+- GeoTIFF reading is stdlib + numpy only (the files are uncompressed
+  single-band 16-bit) — the keyless NSIDC path needs **no new
+  dependencies**. Georeferencing comes from the file's own
+  ModelPixelScaleTag/ModelTiepointTag, falling back to the documented
+  grid constants.
+- Values 1–15% are kept as-is but are statistically irrelevant per the
+  G02135 user guide (passive-microwave uncertainty below 15%); the
+  guide's 15% cutoff defines the ice *extent* edge.
+- `survey-viz` routes the `sea-ice` variable to NSIDC **only** in polar
+  regions. Land ice (glaciers, ice sheets, icebergs) is a different
+  physical product — see the `survey-viz` parser's honest refusal for
+  those phrases.
+
 ## Choosing a source
 
 - **US Great Lakes / coasts, no signup:** NOAA OFS (LMHOFS for Lake

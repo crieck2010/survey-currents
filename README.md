@@ -181,6 +181,13 @@ Active-fire detections converge on `FireField` (`src/currents/fires.py`):
 - `to_density_grid(resolution=0.25, frp_weighted=False)` bins detections into daily fire-count (or FRP-weighted MW) grids — the plain `times`/`lats`/`lons`/`values` dict `survey-viz` renders with zero changes
 - `select_time()`, `select_bbox()`, JSON round-trip, `FireField.synthetic()`; provenance carries the key-**redacted** request URLs, per-request SHA-256, and retrieval timestamp (the MAP_KEY is never stored)
 
+Daily sea-ice concentration converges on `IceField` (`src/currents/sea_ice.py`):
+
+- Gridded percent (0–100): `times`/`lats`/`lons`/`values` on a regular lat/lon grid; pole-hole/coast/land/missing cells are NaN
+- `fetch_nsidc_sic(bbox, start, end, hemisphere="auto", stride_days=1, resolution=0.25)` — downloads the G02135 v4.0 daily concentration GeoTIFFs over **keyless anonymous HTTPS** (no account; verified live 2026-09-26), decodes the ×10-scaled uint16 values, and nearest-neighbor reprojects the native 25 km NSIDC polar-stereographic grids (EPSG:3411/3412, Hughes 1980) onto the target grid; record 1978-11-01–present, missing days skipped with a provenance note
+- `select_time()`, `select_bbox()`, JSON round-trip, `IceField.synthetic()`; provenance carries the exact file URLs, per-file SHA-256, reprojection method, and retrieval timestamp
+- CLI: `fetch-nsidc`, `ice-synthetic`
+
 ## Interoperability
 
 - **survey-monitor**: `CurrentsPassProvider` in `currents/interop.py` implements the `PassProvider` interface (`list_passes`/`metrics`) — each forecast hour becomes a monitored pass with `speed_mean`/`u_mean`/`v_mean`/`temp_mean` metrics.
@@ -199,6 +206,7 @@ src/currents/
     era5.py        # Copernicus ERA5 hourly reanalysis (wind/msl/t2m/tp) via cdsapi
     currents_global.py  # NASA PODAAC OSCAR v2.0 + CMEMS global-physics-daily currents
     fires.py       # NASA FIRMS active-fire detections (area API) -> FireField + density grids
+    sea_ice.py     # NSIDC G02135 v4.0 daily sea-ice concentration (keyless HTTPS) -> IceField
     cmems.py       # copernicusmarine subset wrapper + parser
     convert.py     # per-timestep 4-band GeoTIFF/COG export
     provenance.py  # SHA-256 provenance sidecars

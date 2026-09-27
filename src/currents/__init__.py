@@ -17,7 +17,7 @@ the ``pip install`` extra.
 
 from __future__ import annotations
 
-__version__ = "0.6.0"
+__version__ = "0.7.0"
 
 from .currents_global import (
     CMEMS_CURRENTS_PRESET, CMEMS_CURRENTS_VARIABLES, OSCAR_COLLECTIONS,
@@ -44,6 +44,14 @@ from .sst_global import (CMR_GRANULE_SEARCH, CredentialsMissing, SstField,
                          mur_match_granules, mur_opendap_url, mur_subset_urls,
                          oisst_lon_windows, oisst_sst_urls,
                          validate_sst_bbox)
+from .sea_ice import (HUGHES_A, HUGHES_E2, NSIDC_BASE, NSIDC_CELL_M,
+                       NSIDC_CONC_SCALE, NSIDC_FLAG_LABELS, NSIDC_FLAGS,
+                       NSIDC_GRIDS, NSIDC_G02135_PATH, NSIDC_START,
+                       NSIDC_VERSION, IceField, decode_concentration,
+                       fetch_nsidc_sic, nsidc_conc_url, pick_hemisphere,
+                       ps_forward, read_concentration_geotiff,
+                       reproject_to_latlon, resolve_native_grid, target_grid,
+                       validate_ice_bbox)
 
 __all__ = [
     "CurrentField",
@@ -67,6 +75,28 @@ __all__ = [
     "fetch_mur",
     "oisst_sst_urls",
     "oisst_lon_windows",
+    "IceField",
+    "fetch_nsidc_sic",
+    "nsidc_conc_url",
+    "pick_hemisphere",
+    "validate_ice_bbox",
+    "decode_concentration",
+    "read_concentration_geotiff",
+    "reproject_to_latlon",
+    "resolve_native_grid",
+    "ps_forward",
+    "target_grid",
+    "NSIDC_BASE",
+    "NSIDC_G02135_PATH",
+    "NSIDC_VERSION",
+    "NSIDC_START",
+    "NSIDC_GRIDS",
+    "NSIDC_FLAGS",
+    "NSIDC_FLAG_LABELS",
+    "NSIDC_CONC_SCALE",
+    "NSIDC_CELL_M",
+    "HUGHES_A",
+    "HUGHES_E2",
     "mur_granule_title",
     "mur_opendap_url",
     "mur_subset_urls",

@@ -4,6 +4,37 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.0] - 2026-09-26
+
+### Added
+- NSIDC Sea Ice Index adapter (`src/currents/sea_ice.py`):
+  `fetch_nsidc_sic(bbox, start, end, hemisphere="auto", stride_days=1,
+  resolution=0.25)` -> `IceField`. **Verified live 2026-09-26:**
+  `https://noaadata.apps.nsidc.org/NOAA/G02135/{north,south}/daily/geotiff/{YYYY}/{MM_Mon}/{N,S}_YYYYMMDD_concentration_v4.0.tif`
+  serves daily concentration GeoTIFFs over **keyless anonymous HTTPS**
+  (no Earthdata login, no key — directory listings and real files
+  return HTTP 200 anonymously). **Correction from the plan:** G02135
+  v4 uses the NSIDC polar stereographic grid (EPSG:3411 North,
+  EPSG:3412 South, Hughes 1980 ellipsoid, 25 km), not EASE-Grid.
+  - stdlib+numpy only: a minimal reader for the uncompressed
+    single-band 16-bit GeoTIFFs (`read_concentration_geotiff`, tags
+    with fallback to the documented grid constants); concentration is
+    ×10-scaled (÷10 → percent 0-100); flags 2510/2530/2540/2550
+    (pole hole/coast/land/missing) → NaN.
+  - Nearest-neighbor reprojection of the native grids onto the
+    caller's regular lat/lon grid (documented choice — preserves the
+    15%-threshold ice edge; the formulas are verified against a live
+    file: the pole maps to pixel (154, 234) where the pole-hole flag
+    sits). Southern target lats are masked off the north grid and vice
+    versa (the |lat|-symmetric formulas would otherwise alias rings
+    across hemispheres).
+  - `IceField`: gridded percent model, `select_time`/`select_bbox`,
+    JSON round-trip, deterministic `synthetic()` fixture, per-file
+    SHA-256 provenance; missing days (SMMR every-other-day era,
+    1987-12-03 → 1988-01-13 outage) are skipped with a provenance
+    note — record starts 1978-11-01.
+  - CLI: `fetch-nsidc`, `ice-synthetic`.
+
 ## [0.6.0] - 2026-09-26
 
 ### Added

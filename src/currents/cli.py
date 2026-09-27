@@ -236,6 +236,33 @@ def cmd_fires_synthetic(a: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_fetch_nsidc(a: argparse.Namespace) -> int:
+    from .sea_ice import fetch_nsidc_sic
+    field = fetch_nsidc_sic(_parse_bbox(a.bbox), a.start, a.end,
+                            hemisphere=a.hemisphere,
+                            stride_days=a.stride_days,
+                            resolution=a.resolution)
+    path = f"{a.out.rstrip('/')}.json"
+    field.to_json(path)
+    print(f"fetched NSIDC sea-ice field ({len(field)} days, "
+          f"hemisphere={field.hemisphere}) -> {path}")
+    print(f"source={field.source} bounds={field.bounds}")
+    print(f"n_files={field.provenance.get('n_files')} "
+          f"skipped={len(field.provenance.get('skipped_days', []))}")
+    return 0
+
+
+def cmd_ice_synthetic(a: argparse.Namespace) -> int:
+    from .sea_ice import IceField
+    field = IceField.synthetic(bbox=_parse_bbox(a.bbox), start=a.start,
+                               end=a.end, resolution=a.resolution,
+                               seed=a.seed, source=a.source)
+    path = f"{a.out.rstrip('/')}.json"
+    field.to_json(path)
+    print(f"wrote synthetic NSIDC sea-ice field ({len(field)} days) -> {path}")
+    return 0
+
+
 def cmd_sst_synthetic(a: argparse.Namespace) -> int:
     from .sst_global import SstField
     field = SstField.synthetic(nt=a.nt, seed=a.seed, source=a.source)
@@ -336,6 +363,36 @@ def build_parser() -> argparse.ArgumentParser:
                    help="granule sampling stride in days (default 30)")
     s.add_argument("--out", default="mur_sst", help="output path prefix")
     s.set_defaults(func=cmd_fetch_mur)
+
+    s = sub.add_parser("fetch-nsidc",
+                       help="fetch NSIDC G02135 v4.0 daily sea-ice concentration "
+                            "GeoTIFFs (needs network; no account)")
+    s.add_argument("--bbox", required=True, help="min_lon,min_lat,max_lon,max_lat "
+                   "(conventional -180..180; antimeridian-crossing boxes wrap)")
+    s.add_argument("--start", required=True, help="start date YYYY-MM-DD")
+    s.add_argument("--end", required=True, help="end date YYYY-MM-DD")
+    s.add_argument("--hemisphere", default="auto",
+                   help="north/south/auto (default auto from bbox latitudes)")
+    s.add_argument("--stride-days", type=int, default=1,
+                   help="keep every Nth day (default 1)")
+    s.add_argument("--resolution", type=float, default=0.25,
+                   help="target lat/lon grid resolution in degrees (default 0.25)")
+    s.add_argument("--out", default="nsidc_ice", help="output path prefix")
+    s.set_defaults(func=cmd_fetch_nsidc)
+
+    s = sub.add_parser("ice-synthetic",
+                       help="write a deterministic synthetic sea-ice field (offline)")
+    s.add_argument("--bbox", default="-180,66,180,90",
+                   help="min_lon,min_lat,max_lon,max_lat")
+    s.add_argument("--start", default="2024-02-01", help="start date YYYY-MM-DD")
+    s.add_argument("--end", default="2024-02-05", help="end date YYYY-MM-DD")
+    s.add_argument("--resolution", type=float, default=1.0,
+                   help="target lat/lon grid resolution in degrees (default 1.0)")
+    s.add_argument("--seed", type=int, default=7)
+    s.add_argument("--source", default="synthetic",
+                   help="source label recorded on the field")
+    s.add_argument("--out", default="ice_synthetic", help="output path prefix")
+    s.set_defaults(func=cmd_ice_synthetic)
 
     s = sub.add_parser("sst-synthetic",
                        help="write a deterministic synthetic global SST field (offline)")

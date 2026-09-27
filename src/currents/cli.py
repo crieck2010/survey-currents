@@ -291,6 +291,34 @@ def cmd_rain_synthetic(a: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_fetch_blackmarble(a: argparse.Namespace) -> int:
+    from .blackmarble import fetch_blackmarble
+    field = fetch_blackmarble(_parse_bbox(a.bbox), a.start, a.end,
+                              product=a.product,
+                              stride_days=a.stride_days,
+                              resolution=a.resolution)
+    path = f"{a.out.rstrip('/')}.json"
+    field.to_json(path)
+    print(f"fetched Black Marble lights field ({len(field)} days, "
+          f"product={a.product}) -> {path}")
+    print(f"source={field.source} units={field.units} bounds={field.bounds}")
+    print(f"n_files={field.provenance.get('n_files')} "
+          f"skipped={len(field.provenance.get('skipped', []))}")
+    return 0
+
+
+def cmd_lights_synthetic(a: argparse.Namespace) -> int:
+    from .blackmarble import LightsField
+    field = LightsField.synthetic(bbox=_parse_bbox(a.bbox), start=a.start,
+                                  end=a.end, resolution=a.resolution,
+                                  seed=a.seed, source=a.source)
+    path = f"{a.out.rstrip('/')}.json"
+    field.to_json(path)
+    print(f"wrote synthetic Black Marble lights field ({len(field)} days) "
+          f"-> {path}")
+    return 0
+
+
 def cmd_sst_synthetic(a: argparse.Namespace) -> int:
     from .sst_global import SstField
     field = SstField.synthetic(nt=a.nt, seed=a.seed, source=a.source)
@@ -455,6 +483,38 @@ def build_parser() -> argparse.ArgumentParser:
                    help="source label recorded on the field")
     s.add_argument("--out", default="rain_synthetic", help="output path prefix")
     s.set_defaults(func=cmd_rain_synthetic)
+
+    s = sub.add_parser("fetch-blackmarble",
+                       help="fetch NASA Black Marble daily night lights "
+                            "(needs network + free Earthdata Login)")
+    s.add_argument("--bbox", required=True, help="min_lon,min_lat,max_lon,max_lat "
+                   "(conventional -180..180; antimeridian-crossing boxes wrap)")
+    s.add_argument("--start", required=True, help="start date YYYY-MM-DD "
+                   "(record starts 2012-01-19)")
+    s.add_argument("--end", required=True, help="end date YYYY-MM-DD")
+    s.add_argument("--product", default="daily",
+                   help="daily (default: VNP46A2 V002 gap-filled NTL)")
+    s.add_argument("--stride-days", type=int, default=1,
+                   help="keep every Nth day (default 1)")
+    s.add_argument("--resolution", type=float, default=0.05,
+                   help="output grid spacing in degrees (default 0.05; "
+                        "native 15 arc-second tiles are block-averaged)")
+    s.add_argument("--out", default="blackmarble_lights", help="output path prefix")
+    s.set_defaults(func=cmd_fetch_blackmarble)
+
+    s = sub.add_parser("lights-synthetic",
+                       help="write a deterministic synthetic night-lights field (offline)")
+    s.add_argument("--bbox", default="-125.0,25.0,-66.0,49.0",
+                   help="min_lon,min_lat,max_lon,max_lat")
+    s.add_argument("--start", default="2024-01-01", help="start date YYYY-MM-DD")
+    s.add_argument("--end", default="2024-01-05", help="end date YYYY-MM-DD")
+    s.add_argument("--resolution", type=float, default=1.0,
+                   help="synthetic grid resolution in degrees (default 1.0)")
+    s.add_argument("--seed", type=int, default=7)
+    s.add_argument("--source", default="synthetic",
+                   help="source label recorded on the field")
+    s.add_argument("--out", default="lights_synthetic", help="output path prefix")
+    s.set_defaults(func=cmd_lights_synthetic)
 
     s = sub.add_parser("sst-synthetic",
                        help="write a deterministic synthetic global SST field (offline)")

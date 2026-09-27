@@ -4,6 +4,42 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.9.0] - 2026-09-27
+
+### Added
+- NASA Black Marble night-lights adapter (`src/currents/blackmarble.py`):
+  `fetch_blackmarble(bbox, start, end, product="daily", stride_days=1,
+  resolution=0.05)` -> `LightsField`. **Verified live 2026-09-26:**
+  VNP46A2 V002 (daily gap-filled lunar BRDF-adjusted nighttime lights,
+  CMR collection `C3365931269-LAADS`, record starts 2012-01-19). V002
+  keeps the `hHHvVV` tile naming but the tiles are **10°×10° lat/lon**
+  tiles (the V2 "15 arc-second linear lat/lon grid"), not sinusoidal:
+  `h = floor((lon + 180) / 10)`, `v = floor((90 - lat_top) / 10)` —
+  verified against live CMR footprints (`h07v10` = lon −110..−100, lat
+  −20..−10). Filenames carry an unpredictable production stamp, so the
+  adapter **discovers** exact download URLs per (day, tile) through the
+  **keyless** NASA CMR granule search, then downloads from LAADS with
+  Earthdata Login (`EARTHDATA_USERNAME`/`EARTHDATA_PASSWORD` or
+  `.netrc`; `CredentialsMissing` otherwise — both LAADS endpoints were
+  verified to redirect unauthenticated requests to URS OAuth).
+  - Science dataset `Gap_Filled_DNB_BRDF_Corrected_NTL` (fallback
+    `DNB_BRDF_Corrected_NTL`) in nW/cm²/sr; `_FillValue` → NaN;
+    `scale_factor`/`add_offset` honored; tiles mosaicked and NaN-aware
+    block-averaged to the requested `resolution` (default 0.05°).
+  - `LightsField` follows the `IceField`/`RainField` conventions
+    (`times`/`lats`/`lons`/`values`, `select_time`/`select_bbox`,
+    JSON round-trip, deterministic `synthetic()`, per-file SHA-256
+    provenance with exact URLs, tile list, skipped tiles/days).
+  - CLI: `fetch-blackmarble`, `lights-synthetic`; extra
+    `survey-currents[blackmarble]` (h5py; also in `full`).
+  - 39 new tests, fully offline (mocked CMR/discovery/downloads,
+    in-memory HDF5 fixtures). 417 passed, 22 pre-existing failures
+    (missing netCDF4/xarray in this environment — identical on the
+    pristine v0.8.0 tree), 3 skipped.
+- `docs/DATA_SOURCES.md` §11 documents the product, the verified
+  access truth, the tile math, and why monthly/annual composites stay
+  unwired (daily is the reel factory's time axis).
+
 ## [0.8.0] - 2026-09-27
 
 ### Added

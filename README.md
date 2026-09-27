@@ -18,6 +18,7 @@ Surface-current and water-temperature acquisition engine for surveying and remot
 | NASA PODAAC OSCAR v2.0 via Earthdata OPeNDAP | Free Earthdata Login | **Global ocean currents** | 0.25° (~28 km) | daily averages, 1993–present |
 | CMEMS global ocean physics (`global-physics-daily` preset) | Free CMEMS account | **Global ocean currents** | 1/12° (~9 km) | daily analysis+forecast |
 | NASA GPM IMERG V07 via GES DISC HTTPS | Free Earthdata Login | **Global precipitation** | 0.1° (~10 km) | half-hourly, 2000–present (Early/Late/Final runs) |
+| NASA Black Marble VNP46A2 V002 via LAADS DAAC | Free Earthdata Login | **Global night lights** | 15″ native, 0.05° default output | daily DNB radiance, 2012–present |
 
 Registered NOAA models include **GLOFS** (Great Lakes, 5 km, 60 h), **LMHOFS** (Lake Michigan/Huron, 50 m–2.5 km, 120 h — the source of the Lake Michigan reel), LEOFS, CBOFS, DBOFS, GoMOFS, WCOFS, NGOFS2, SFBOFS, TBOFS, CIOFS, CREOFS, SSCOFS. Full table in `docs/DATA_SOURCES.md`.
 

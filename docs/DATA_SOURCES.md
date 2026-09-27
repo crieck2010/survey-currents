@@ -448,6 +448,39 @@ Operational notes:
 - HDF5 parsing needs `h5py`: `pip install "survey-currents[imerg]"`
   (also in the `full` extra). The engine core stays stdlib+numpy.
 
+## 11. NASA Black Marble VNP46A2 V002 — global daily night lights (free Earthdata Login)
+
+Moonlight-adjusted nighttime lights: daily DNB radiance, 2012-01-19–present.
+
+| Item | Value |
+|---|---|
+| Archive | LAADS DAAC: `https://data.laadsdaac.earthdatacloud.nasa.gov/prod-lads/VNP46A2/...` (Earthdata Cloud) and `https://ladsweb.modaps.eosdis.nasa.gov/archive/allData/5000/VNP46A2/...` (on-prem) |
+| File naming | `VNP46A2.A{YYYY}{DOY}.h{HH}v{VV}.002.{production-stamp}.h5` — the production stamp is not predictable, so the adapter **discovers** exact download URLs per (day, tile) through NASA CMR granule search (`https://cmr.earthdata.nasa.gov/search/granules.json`, collection `C3365931269-LAADS`) |
+| Auth | **Free Earthdata Login** (`EARTHDATA_USERNAME`/`EARTHDATA_PASSWORD` or `.netrc`, same as the MUR/IMERG path). Verified live 2026-09-26: CMR granule *discovery* is **keyless** (HTTP 200, no credentials), but both LAADS download endpoints redirect unauthenticated requests to `urs.earthdata.nasa.gov` (OAuth) — `CredentialsMissing` is raised otherwise |
+| Tiles | V002 keeps the `hHHvVV` naming but the tiles are **10°×10° lat/lon tiles** (the V2 "15 arc-second linear lat/lon grid"), not sinusoidal: `h = floor((lon + 180) / 10)` (0..35), `v = floor((90 - lat_top) / 10)` (0..17). Verified against live CMR footprints (`h07v10` = lon −110..−100, lat −20..−10) |
+| Grid | Native 15 arc-second (2400×2400 per tile); the adapter mosaics the tiles covering the bbox and NaN-aware block-averages to the requested `resolution` (default 0.05°) |
+| Encoding | `Gap_Filled_DNB_BRDF_Corrected_NTL` (fallback `DNB_BRDF_Corrected_NTL`) in nW/cm²/sr; `_FillValue` → NaN; `scale_factor`/`add_offset` attributes honored when present |
+| Record | 2012-01-19–present (daily; enforced with an honest error for earlier dates) |
+| Model | `LightsField` — `times`/`lats`/`lons`/`values` (nW/cm²/sr, NaN for unlit/missing), per-file SHA-256 provenance with exact download URLs, tile list, and skipped tiles/days |
+
+Operational notes:
+
+- The VNP46A2 monthly (VNP46A3) and annual (VNP46A4) composites exist but
+  are **not wired**: daily is the primary product because the reel
+  factory needs a time axis. `product="monthly"`/`"annual"` raise a
+  `ValueError` naming the future work instead of silently misbehaving.
+- Each fetch downloads **one HDF5 tile per (day, tile)** (~tens of MB
+  each, ~384 tiles/day globally) and mosaics locally — keep windows and
+  bboxes tight, or use `stride_days` for sampling. Night lights change
+  slowly, so `survey-viz` defaults `night-lights` specs to monthly
+  cadence (one sampled day per month).
+- HDF5 parsing needs `h5py`: `pip install "survey-currents[blackmarble]"`
+  (also in the `full` extra). The engine core stays stdlib+numpy.
+- A single-epoch Black Marble map is **not a change-detection product**:
+  `survey-viz` parses "power outage"/"blackout" to a `power-outage`
+  variable with no adapter and an honest refusal, rather than
+  misrouting to the daily lights product.
+
 ## Choosing a source
 
 - **US Great Lakes / coasts, no signup:** NOAA OFS (LMHOFS for Lake

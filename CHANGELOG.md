@@ -4,6 +4,42 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.15.0] - 2026-09-27
+
+### Added
+- USGS earthquakes adapter (`src/currents/earthquakes.py`):
+  `fetch_earthquakes(bbox, start, end, min_magnitude=0.0,
+  event_type=None, page_size=2000)` -> `QuakeField` via the **keyless
+  USGS ComCat FDSN event service** (GeoJSON). Count-first, then
+  `limit`/`offset` pages (paged metadata carries limit/offset, not
+  count — verified live 2026-09-27); windows whose count exceeds the
+  20000-event FDSN ceiling are recursively time-split; responses
+  cached under `$SURVEY_CURRENTS_CACHE/comcat` (atomic writes, SHA-256
+  sidecars, 7-day revalidation). Per-event records (`event_id`, UTC
+  time, lat/lon, depth, magnitude, magnitude type, place, event type);
+  missing magnitudes stay None, never 0.0; non-tectonic event types
+  kept and labeled honestly. Depth bins for rendering (shallow <70 km,
+  intermediate 70–300 km, deep >300 km); `largest()`, `select_time()`,
+  `counts_by_day()`, JSON round-trip, deterministic
+  `QuakeField.synthetic()`. Provenance carries exact request URLs,
+  count/parsed/malformed/duplicate tallies, retrieval timestamp,
+  `empty_reason`, and a catalog-completeness note. **Honesty contract:**
+  ComCat is a catalog of observed events — never a forecast or hazard
+  model; magnitude completeness varies by region and time; record
+  floor 1900-01-01. Live-verified 2026-09-27 (global M4+ week: 179
+  events; M0+: 1,906; California M4+ window: legitimate empty catalog).
+- CLI: `fetch-earthquakes` (real fetch), `earthquakes-synthetic`
+  (offline deterministic field).
+- 32 fully-offline tests (`tests/test_earthquakes.py` — URL
+  builders, parsing incl. malformed features/missing magnitude/depth,
+  pagination, time-chunking over the FDSN ceiling, dedupe, cache
+  integrity, model methods, mocked fetch; live test behind
+  `SURVEY_CURRENTS_LIVE=1`).
+
+### Changed
+- README: ComCat section + honesty-contract limitation; docs layout
+  listing; `docs/DATA_SOURCES.md` gains §17 (ComCat).
+
 ## [0.14.0] - 2026-09-27
 
 ### Added

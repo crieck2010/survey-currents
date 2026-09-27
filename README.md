@@ -245,6 +245,14 @@ USGS streamgage daily values converge on `GageField` (`src/currents/streamgages.
 - `to_si()` converts to m³/s / m on exact NIST factors (`1 ft³/s = 0.028316846592 m³/s`); `percentile_of_record()` and `regional_median()` document the survey-viz marker-color and regional-hydrograph rules; `select_site()`, JSON round-trip, `GageField.synthetic()` (incl. an engineered 10-day gap block)
 - CLI: `fetch-usgs`, `usgs-synthetic`
 
+USGS earthquake catalog (ComCat) converges on `QuakeField` (`src/currents/earthquakes.py`):
+
+- Per-event records: `event_id`, UTC `time`, `lat`/`lon`, `depth_km`, `magnitude`, `mag_type`, `place`, `event_type` (earthquake, quarry blast, explosion, … — non-tectonic types are kept and labeled honestly, never relabeled); missing magnitudes stay `None`, never 0.0; missing depths stay `None`
+- `fetch_earthquakes(bbox, start, end, min_magnitude=0.0, event_type=None, page_size=2000)` via the **keyless ComCat FDSN event service** (GeoJSON): counts first, then pages with `limit`/`offset` (paged metadata carries limit/offset, not count — verified live 2026-09-27), and recursively time-splits windows whose count exceeds the 20000-event FDSN ceiling; responses cached under `$SURVEY_CURRENTS_CACHE/comcat` (atomic writes, SHA-256 sidecars, 7-day revalidation); events deduped by event ID and sorted by time
+- Depth bins for rendering: shallow <70 km, intermediate 70–300 km, deep >300 km (`QuakeEvent.depth_bin()`); `largest(n)`, `select_time()`, `counts_by_day()` (daily cumulative frames), JSON round-trip, deterministic `QuakeField.synthetic()`; provenance carries exact request URLs, count/parsed/malformed/duplicate tallies, retrieval timestamp, an empty-window `empty_reason`, and a catalog-completeness note
+- **Honesty contract:** ComCat is a catalog of *observed* events — never describe it as an earthquake forecast or hazard model; magnitude completeness varies by region and time (~M4.5+ globally since ~1973, ~M2.5+ in the contiguous US since ~2013); record floor 1900-01-01
+- CLI: `fetch-earthquakes`, `earthquakes-synthetic`
+
 ## Interoperability
 
 - **survey-monitor**: `CurrentsPassProvider` in `currents/interop.py` implements the `PassProvider` interface (`list_passes`/`metrics`) — each forecast hour becomes a monitored pass with `speed_mean`/`u_mean`/`v_mean`/`temp_mean` metrics.
@@ -265,6 +273,9 @@ src/currents/
     fires.py       # NASA FIRMS active-fire detections (area API) -> FireField + density grids
     sea_ice.py     # NSIDC G02135 v4.0 daily sea-ice concentration (keyless HTTPS) -> IceField
     imerg.py       # NASA GPM IMERG V07 half-hourly precipitation (Earthdata HTTPS) -> RainField
+    streamgages.py # USGS Water Services (keyless NWIS) streamgage daily values -> GageField
+    oceancolor.py  # NOAA CoastWatch ERDDAP + NASA OBPG ocean color (chlorophyll-a) -> OceanColorField
+    earthquakes.py # USGS ComCat FDSN event service (keyless GeoJSON) -> QuakeField
     cmems.py       # copernicusmarine subset wrapper + parser
     convert.py     # per-timestep 4-band GeoTIFF/COG export
     provenance.py  # SHA-256 provenance sidecars
@@ -282,6 +293,7 @@ examples/
 - **Regular grids only (v0.1.0).** The NetCDF parser handles regular lat/lon grids (e.g. GLOFS). Unstructured FVCOM triangular meshes (native LMHOFS/LEOFS output) raise a clear error — regridding is planned. Many NOAA S3 holdings are regridded; check `info` output.
 - **Model data, not observations.** OFS/CMEMS fields are hydrodynamic model output (assimilated, but still model). Treat as guidance; validate against in-situ or satellite SST where it matters.
 - **Filename conventions vary per OFS.** The engine lists the date prefix and filters keys by OFS-code/date/cycle/hour tokens rather than assuming exact names.
+- **ComCat is an observed-event catalog, not a forecast.** `fetch_earthquakes` returns what the USGS recorded — never call it an earthquake forecast or hazard model. Magnitude completeness varies by region and time; small and historical events are under-recorded. Non-tectonic event types (quarry blast, explosion, induced, …) are included and labeled honestly unless `event_type` filters them.
 - Landsat-overpass-style diurnal caveats from survey-thermal apply in reverse: model hours are forecast hours from the cycle time, not local solar time — align windows deliberately when comparing with satellite passes.
 
 ## License

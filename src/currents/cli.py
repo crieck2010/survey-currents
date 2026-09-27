@@ -403,6 +403,41 @@ def cmd_usgs_synthetic(a: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_fetch_earthquakes(a: argparse.Namespace) -> int:
+    from .earthquakes import fetch_earthquakes
+    field = fetch_earthquakes(_parse_bbox(a.bbox), a.start, a.end,
+                              min_magnitude=a.min_magnitude,
+                              event_type=a.event_type or None,
+                              page_size=a.page_size)
+    path = f"{a.out.rstrip('/')}.json"
+    field.to_json(path)
+    print(f"fetched USGS ComCat earthquake field ({len(field)} events) -> {path}")
+    print(f"source={field.source} min_magnitude={field.min_magnitude} "
+          f"event_type={field.event_type} bounds={field.bounds}")
+    prov = field.provenance
+    print(f"queried={prov.get('n_events_queried')} "
+          f"parsed={prov.get('n_events_parsed')} "
+          f"malformed={prov.get('n_events_malformed')} "
+          f"duplicates={prov.get('n_events_duplicates')}")
+    largest = field.largest(1)
+    if largest:
+        top = largest[0]
+        print(f"largest: M{top.magnitude} ({top.mag_type}) {top.place} "
+              f"depth={top.depth_km} km")
+    return 0
+
+
+def cmd_earthquakes_synthetic(a: argparse.Namespace) -> int:
+    from .earthquakes import QuakeField
+    field = QuakeField.synthetic(bbox=_parse_bbox(a.bbox), start=a.start,
+                                 end=a.end, n_events=a.n_events,
+                                 seed=a.seed, source=a.source)
+    path = f"{a.out.rstrip('/')}.json"
+    field.to_json(path)
+    print(f"wrote synthetic USGS earthquake field ({len(field)} events) -> {path}")
+    return 0
+
+
 def cmd_sst_synthetic(a: argparse.Namespace) -> int:
     from .sst_global import SstField
     field = SstField.synthetic(nt=a.nt, seed=a.seed, source=a.source)
@@ -800,6 +835,37 @@ def build_parser() -> argparse.ArgumentParser:
                    help="source label recorded on the field")
     s.add_argument("--out", default="usgs_synthetic", help="output path prefix")
     s.set_defaults(func=cmd_usgs_synthetic)
+
+    s = sub.add_parser("fetch-earthquakes",
+                       help="fetch the USGS ComCat earthquake catalog "
+                            "(needs network; keyless FDSN event service; "
+                            "paginated + cached)")
+    s.add_argument("--bbox", required=True, help="min_lon,min_lat,max_lon,max_lat")
+    s.add_argument("--start", required=True, help="start date YYYY-MM-DD")
+    s.add_argument("--end", required=True, help="end date YYYY-MM-DD")
+    s.add_argument("--min-magnitude", type=float, default=0.0,
+                   help="ComCat minmagnitude filter (default: 0.0)")
+    s.add_argument("--event-type", default="",
+                   help="ComCat eventtype filter, e.g. 'earthquake' "
+                        "(default: all types)")
+    s.add_argument("--page-size", type=int, default=2000,
+                   help="events per paged request, 1..20000 (default: 2000)")
+    s.add_argument("--out", default="usgs_quakes", help="output path prefix")
+    s.set_defaults(func=cmd_fetch_earthquakes)
+
+    s = sub.add_parser("earthquakes-synthetic",
+                       help="write a deterministic synthetic earthquake field (offline)")
+    s.add_argument("--bbox", default="-140.0,30.0,-110.0,50.0",
+                   help="min_lon,min_lat,max_lon,max_lat")
+    s.add_argument("--start", default="2024-01-01", help="start date YYYY-MM-DD")
+    s.add_argument("--end", default="2024-01-31", help="end date YYYY-MM-DD")
+    s.add_argument("--n-events", type=int, default=40,
+                   help="number of synthetic events (default: 40)")
+    s.add_argument("--seed", type=int, default=13, help="random seed")
+    s.add_argument("--source", default="synthetic",
+                   help="source label recorded on the field")
+    s.add_argument("--out", default="quakes_synthetic", help="output path prefix")
+    s.set_defaults(func=cmd_earthquakes_synthetic)
 
     s = sub.add_parser("sst-synthetic",
                        help="write a deterministic synthetic global SST field (offline)")

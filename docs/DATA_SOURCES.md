@@ -660,6 +660,27 @@ Access status (recorded 2026-09-27):
   via `cmems_dataset_id`; it is an optional extra source, not the
   required fallback.
 
+## 17. USGS Earthquake Catalog (ComCat) — global seismic events (no account)
+
+The USGS ComCat FDSN event service: a catalog of **observed**
+seismic events (earthquakes plus non-tectonic types like quarry
+blasts), served as GeoJSON over keyless HTTPS. It is **not** an
+earthquake forecast or hazard model — say so explicitly wherever it
+is surfaced.
+
+| Item | Value |
+|---|---|
+| Endpoints | Query: `https://earthquake.usgs.gov/fdsnws/event/1/query?format=geojson&starttime=…&endtime=…&minlatitude=…&maxlatitude=…&minlongitude=…&maxlongitude=…&minmagnitude=…[&eventtype=…][&limit=…&offset=…]`; count: `https://earthquake.usgs.gov/fdsnws/event/1/count` (same params minus `format`; returns a plain-text integer) |
+| Access | Keyless HTTPS; no token, no signup. Live-verified 2026-09-27: global M4+ for 2026-09-20…2026-09-27 returned 179 events; M0+ returned 1,906; a California M4+ window returned a legitimate empty catalog; paged queries (`limit=50&offset=1`) returned 50 features. No numeric rate limit observed (no rate/quota/retry headers seen); be a polite client anyway |
+| Pagination | Paged-response metadata carries `limit`/`offset`, not `count` (verified live) — the adapter stops on a short page, never on a count key. Queries whose count exceeds the 20000-event FDSN ceiling are recursively time-split until every chunk is page-sized; a single day that still exceeds the ceiling raises a clear error |
+| Event fields | `id`, epoch-ms `time` (UTC), `mag` (None when unreported — never 0.0), `magType`, `place`, `type` (event type), geometry coordinates lon/lat/depth-km (2-D coordinates → depth None). Events deduped by `id`, sorted by time |
+| Magnitude completeness | Varies by region and time: roughly M4.5+ globally since ~1973 and M2.5+ in the contiguous US since ~2013; small and historical events are under-recorded. Record floor 1900-01-01 |
+| Access pattern | Payloads cached under `$SURVEY_CURRENTS_CACHE/comcat` (atomic writes, SHA-256 sidecars, corruption-triggered redownload, 7-day freshness, `refresh=True` forces re-download); cache key covers the full request URL |
+| Query | `fetch_earthquakes(bbox, start, end, min_magnitude=0.0, event_type=None, page_size=2000)`; `event_query_url(...)` / `event_count_url(...)` build the exact URLs offline |
+| Model | `QuakeField` (`.events`, `largest(n)`, `select_time()`, `counts_by_day()` for daily cumulative frames, `magnitudes()`, `to_dict`/`from_dict`, `to_json`/`from_json`, deterministic `synthetic()` with a Gutenberg–Richter-ish magnitude taper); `QuakeEvent.depth_bin()` = shallow <70 km / intermediate 70–300 km / deep >300 km |
+| CLI | `fetch-earthquakes --bbox … --start … --end … [--min-magnitude 0.0] [--event-type earthquake] [--page-size 2000] [--out …]`, `earthquakes-synthetic` |
+| Interop | Consumed by the `comcat` source in survey-viz (`earthquakes` variable, magnitude-scaled/depth-colored event renderer with cumulative daily frames) |
+
 ## Choosing a source
 
 - **US Great Lakes / coasts, no signup:** NOAA OFS (LMHOFS for Lake

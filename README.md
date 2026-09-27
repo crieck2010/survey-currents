@@ -24,6 +24,10 @@ Surface-current and water-temperature acquisition engine for surveying and remot
 | NOAA IBTrACS v04r01 via NCEI HTTPS (download-once, cached) | No signup | **Global tropical-cyclone best tracks** | 3-hourly fixes | 1980–present (1842– with `--full-archive`) |
 | CSR GRACE/GRACE-FO RL06.3 via anonymous HTTPS (download-once, cached) | No signup | **Global land water storage** | 0.25° output grid (mascon native resolution coarser) | monthly anomalies, 2002–present |
 | USGS Water Services NWIS via keyless HTTPS (inventory + dv cached) | No signup | **US streamgages** | per-site daily values | daily discharge/gage height, 1857–present |
+| NOAA CoastWatch ERDDAP griddap (`nesdisVHNSQchlaMonthly` et al.) | No signup | **Global ocean color** | ~4 km | chlorophyll-a monthly (default), weekly, daily; 2012–present |
+| MODIS Aqua `erdMH1chlamday_R2022SQ` via CoastWatch ERDDAP | No signup | **Global ocean color** | ~4 km | chlorophyll-a monthly, 2002–present |
+| ESA OC-CCI v6.0 `pmlEsaCCI60OceanColorMonthly` via CoastWatch ERDDAP | No signup | **Global ocean color** | ~4 km | multi-sensor chlorophyll-a monthly, 1997–present |
+| CMEMS `OCEANCOLOUR_GLO_BGC_L4_MY_009_104` | Free CMEMS account | **Global ocean color** | 4 km | chlorophyll-a monthly, 1997–present |
 
 Registered NOAA models include **GLOFS** (Great Lakes, 5 km, 60 h), **LMHOFS** (Lake Michigan/Huron, 50 m–2.5 km, 120 h — the source of the Lake Michigan reel), LEOFS, CBOFS, DBOFS, GoMOFS, WCOFS, NGOFS2, SFBOFS, TBOFS, CIOFS, CREOFS, SSCOFS. Full table in `docs/DATA_SOURCES.md`.
 
@@ -175,6 +179,13 @@ survey-currents fetch-usgs --bbox=-83.5,42.0,-82.0,43.5 \
     --start 2026-09-20 --end 2026-09-24 --parameters 00060,00065 \
     --min-record-days 3 --out huron_gages
 survey-currents usgs-synthetic --out usgs_demo
+# NOAA CoastWatch ocean color (chlorophyll-a; no account; monthly is the
+# most cloud-complete; weekly/daily via --cadence; sensors modis-aqua |
+# viirs-snpp | multi; credentials-required NASA OBPG fallback and
+# authenticated CMEMS extra via --source):
+survey-currents fetch-oceancolor --bbox -80,20,-60,40 \
+    --start 2024-01-01 --end 2024-12-31 --out atlantic_chl
+survey-currents oceancolor-synthetic --nt 4 --out chl_demo
 ```
 
 ## The canonical model

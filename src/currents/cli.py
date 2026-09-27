@@ -452,6 +452,33 @@ def cmd_basemaps_synthetic(a: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_fetch_oceancolor(a: argparse.Namespace) -> int:
+    from .oceancolor import fetch_oceancolor
+    field = fetch_oceancolor(_parse_bbox(a.bbox), a.start, a.end,
+                             product=a.product, cadence=a.cadence,
+                             sensor=a.sensor, source=a.source,
+                             refresh=a.refresh, stride=a.stride)
+    path = f"{a.out.rstrip('/')}.json"
+    field.to_json(path)
+    print(f"fetched ocean-color field ({len(field.times)} steps, "
+          f"product={a.product}, cadence={a.cadence}, sensor={a.sensor}) "
+          f"-> {path}")
+    print(f"source={field.source} units=mg/m^3 bounds={field.bounds}")
+    print(f"gap fractions={['%.1f%%' % (100 * g) for g in field.provenance.get('gap_fractions', [])]} "
+          f"(NaN = cloud/land, never filled)")
+    print(f"sha256={field.provenance.get('sha256')}")
+    return 0
+
+
+def cmd_oceancolor_synthetic(a: argparse.Namespace) -> int:
+    from .oceancolor import OceanColorField
+    field = OceanColorField.synthetic(nt=a.nt, seed=a.seed, source=a.source)
+    path = f"{a.out.rstrip('/')}.json"
+    field.to_json(path)
+    print(f"wrote synthetic ocean-color field ({len(field.times)} steps) -> {path}")
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="survey-currents",
                                 description="Surface-current / water-temperature acquisition engine")
@@ -666,6 +693,43 @@ def build_parser() -> argparse.ArgumentParser:
                    help="source label recorded on the field")
     s.add_argument("--out", default="grace_synthetic", help="output path prefix")
     s.set_defaults(func=cmd_grace_synthetic)
+
+    s = sub.add_parser("fetch-oceancolor",
+                       help="fetch NOAA CoastWatch ocean color "
+                            "(chlorophyll-a; needs network; keyless ERDDAP; "
+                            "results cached)")
+    s.add_argument("--bbox", required=True, help="min_lon,min_lat,max_lon,max_lat "
+                   "(conventional -180..180; antimeridian-crossing boxes wrap)")
+    s.add_argument("--start", required=True, help="start date YYYY-MM-DD "
+                   "(record starts 2012-01-01 for viirs-snpp, 2002-07-01 for "
+                   "modis-aqua, 1997-09-01 for multi)")
+    s.add_argument("--end", required=True, help="end date YYYY-MM-DD")
+    s.add_argument("--product", default="chlorophyll-a",
+                   help="only 'chlorophyll-a' in v0.14.0")
+    s.add_argument("--cadence", default="monthly",
+                   help="monthly (default, most cloud-complete) | weekly | daily")
+    s.add_argument("--sensor", default="modis-aqua",
+                   help="modis-aqua (default) | viirs-snpp | multi")
+    s.add_argument("--source", default="coastwatch",
+                   help="coastwatch (default, keyless) | obpg (NASA OBPG, "
+                        "needs free Earthdata Login) | cmems (needs free "
+                        "credentials) | auto")
+    s.add_argument("--stride", type=int, default=1,
+                   help="time-axis index stride (default 1)")
+    s.add_argument("--refresh", action="store_true",
+                   help="ignore the cache and re-download")
+    s.add_argument("--out", default="oceancolor_chl", help="output path prefix")
+    s.set_defaults(func=cmd_fetch_oceancolor)
+
+    s = sub.add_parser("oceancolor-synthetic",
+                       help="write a deterministic synthetic chlorophyll-a "
+                            "field (offline)")
+    s.add_argument("--nt", type=int, default=4)
+    s.add_argument("--seed", type=int, default=12)
+    s.add_argument("--source", default="synthetic",
+                   help="source label recorded on the field")
+    s.add_argument("--out", default="oceancolor_synthetic", help="output path prefix")
+    s.set_defaults(func=cmd_oceancolor_synthetic)
 
     s = sub.add_parser("fetch-ibtracs",
                        help="fetch NOAA IBTrACS v4 tropical-cyclone best tracks "

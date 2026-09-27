@@ -4,6 +4,56 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.14.0] - 2026-09-27
+
+### Added
+- Ocean color adapter (`src/currents/oceancolor.py`):
+  `fetch_oceancolor(bbox, start, end, product="chlorophyll-a",
+  cadence="monthly", sensor="modis-aqua", source="coastwatch")` ->
+  `OceanColorField` (chlorophyll-a in mg/m³, `(nt, ny, nx)` masked array
+  — cloud/land gaps stay NaN, never interpolated). Sensors: `modis-aqua`
+  (`erdMH1chlamday_R2022SQ`, 2002–present, default), `viirs-snpp`
+  (`nesdisVHNSQchlaMonthly/Weekly/Daily`, 2012–present),
+  `multi` (ESA OC-CCI v6.0 `pmlEsaCCI60OceanColorMonthly`,
+  1997–present; ID verified 2026-09-27 against the official
+  coastwatch-training/coastwatch-tutorials repo). `source="obpg"` fetches
+  MODIS Aqua L3 mapped chlorophyll-a from the NASA OBPG direct data
+  access (`oceandata.sci.gsfc.nasa.gov`, documented
+  `AQUA_MODIS.<dates>.L3m.<DAY|8D|MO>.CHL.chlor_a.4km.nc` filenames;
+  CMR collection `C3380709133-OB_CLOUD`/`MODISA_L3m_CHL` verified live
+  2026-09-27) — needs a free Earthdata Login and raises the
+  credentials-gated `CredentialsMissing` without it (never an
+  interactive prompt); this is the required fallback when CoastWatch is
+  unreachable. `source="cmems"` uses the authenticated
+  `OCEANCOLOUR_GLO_BGC_L4_MY_009_104` product via the copernicusmarine
+  toolbox (free CMEMS credentials; optional extra source);
+  `source="auto"` tries CoastWatch, then OBPG when Earthdata
+  credentials exist, then CMEMS when credentials exist, else raises
+  with an actionable message naming all three sources. Monthly is
+  the default cadence (most cloud-complete). Provenance carries the
+  exact URLs, SHA-256 of the payloads, byte counts, retrieval
+  time, sensor, processing level, cadence, units, grid geometry, and
+  per-frame NaN gap fractions (OBPG provenance also records the CMR
+  collection and an honest `live_verified: false` until its network
+  path is exercised with real credentials). Downloads are cached
+  (`$SURVEY_CURRENTS_CACHE/oceancolor`, 7-day freshness) with atomic
+  writes + SHA-256 sidecars and corruption recovery. CLI:
+  `fetch-oceancolor`, `oceancolor-synthetic`. 48 fully offline tests
+  (monkeypatched transport; netCDF4-gated parse fixtures). **Access
+  truth 2026-09-27:** the CoastWatch ERDDAP was unreachable from the
+  build environment during verification (HTTP 502/503 on griddap;
+  `coastwatch.noaa.gov/erddap` itself intermittently 503). Dataset IDs,
+  grid geometry, and query grammar are corroborated against the
+  CoastWatch tutorials repo and sanctuary caption pages; the request
+  path was exercised against a live ERDDAP server (NCEI) with the same
+  `.das`/griddap grammar. A successful end-to-end CoastWatch data pull
+  still needs a re-run once the service recovers — the adapter is
+  written so it does exactly that.
+- `docs/DATA_SOURCES.md`: ocean-color source table (MODIS Aqua R2022
+  monthly default, VIIRS SNPP monthly/weekly/daily, ESA OC-CCI v6.0
+  monthly, NASA OBPG fallback, CMEMS 009_104 optional), resolution/
+  download-size math, and the 2026-09-27 CoastWatch outage record.
+
 ## [0.13.0] - 2026-09-27
 
 ### Added

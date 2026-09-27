@@ -606,6 +606,60 @@ Operational notes:
   should be subdivided by the caller (the national inventory is tens of
   thousands of sites; default `site_limit=200`).
 
+## 16. Ocean color (chlorophyll-a) — NOAA CoastWatch ERDDAP + NASA OBPG (mixed access)
+
+The ocean-color source family: chlorophyll-a concentration in mg m^-3
+from Level-3 satellite products, cloud-masked (NaN cells are kept as
+NaN — never interpolated or filled). The longitude axis is -180..180
+on the wire, so no wrap conversion is needed.
+
+| Item | Value |
+|---|---|
+| Default source | NOAA CoastWatch ERDDAP (keyless HTTPS): `erdMH1chlamday_R2022SQ` — "Chlorophyll-a, Aqua MODIS, V.2022, Monthly, Global, 4km, Science Quality, 2002-present" (`sensor="modis-aqua"`, `cadence="monthly"`) |
+| VIIRS SNPP | `nesdisVHNSQchlaMonthly/Weekly/Daily` — "Chlorophyll, NOAA S-NPP VIIRS, Science Quality, Global 4km, Level 3, 2012-present" (`sensor="viirs-snpp"`, `cadence="monthly"`; weekly and daily IDs also verified) |
+| Multi-sensor merge | `pmlEsaCCI60OceanColorMonthly` — "ESA CCI Ocean Colour v6.0, Monthly, Global, 4km, 1997-present" (`sensor="multi"`) — the longest climate-grade record; ID verified 2026-09-27 against the official coastwatch-training/coastwatch-tutorials repo and an independent research repo, both citing it against the NOAA CoastWatch ERDDAP |
+| NASA OBPG fallback (required) | `source="obpg"` — MODIS Aqua Level-3 mapped chlorophyll-a from the OBPG direct data access (`https://oceandata.sci.gsfc.nasa.gov/directdataaccess/Level-3%20Mapped/Aqua-MODIS`, documented filenames `AQUA_MODIS.<start>_<end>.L3m.<DAY|8D|MO>.CHL.chlor_a.4km.nc`; monthly = calendar month, 8-day = OBPG day-of-year bins 1-8/9-16/…, daily = single date). Needs a free Earthdata Login — without it the adapter raises the credentials-gated `CredentialsMissing` (never an interactive prompt). CMR collection `C3380709133-OB_CLOUD` (`MODISA_L3m_CHL`, v2022.0, 2002-07-04–present) verified live via the keyless CMR collections API 2026-09-27. `source="auto"` tries CoastWatch, then OBPG when Earthdata credentials exist, then CMEMS when CMEMS credentials exist |
+| Griddap URL | `https://coastwatch.noaa.gov/erddap/griddap/{dataset}.nc?chlor_a[({start}):{stride}:({end})][(0.0)][({miny}):({maxy})][({minx}):({maxx})]` — the singleton `altitude` axis is pinned at `(0.0)` exactly like the OISST `zlev` axis; bbox is server-side subset |
+| Grid geometry | ~0.0417° nominal (~4 km); lon -179.9812..179.9813, lat -89.75626..89.75625 (≈ 4320×8640 cells); variable `chlor_a`, units `mg m^-3`, `_FillValue -999.0` → masked |
+| Download-size math | A bbox subset pulls only the requested cells at 4 bytes/cell/frame: a 20°×20° monthly bbox is ~480×480 cells ≈ 0.9 MB/frame (≈ 11 MB for a year of months). The adapter never downloads the full 4320×8640 global frame (~150 MB float32/frame) unless the bbox spans the globe |
+| Cloud gaps | Chlorophyll is cloud-sensitive: daily/weekly frames routinely have large NaN regions; monthly is the default cadence because it is the most cloud-complete. Per-frame gap fractions are recorded (`provenance["gap_fractions"]`, `OceanColorField.gap_fraction()`); NaN cells are rendered as "no observation", never filled |
+| Access pattern | Payloads cached under `$SURVEY_CURRENTS_CACHE/oceancolor` with atomic writes, SHA-256 sidecars verified on every hit, corruption-triggered redownload, 7-day freshness (`refresh=True` forces re-download); cache key covers the full request URL (dataset + bbox + dates + cadence + stride) |
+| Query | `fetch_oceancolor(bbox, start, end, product="chlorophyll-a", cadence="monthly", sensor="modis-aqua", source="coastwatch")`; `oceancolor_urls(...)` builds the exact ERDDAP URLs offline; `obpg_file_names(...)` builds the exact OBPG filenames offline |
+| Model | `OceanColorField` (`.values`/`chl` `(nt, ny, nx)` masked array in mg/m³, `.times`/`.lats`/`.lons`, `spatial_median()` (NaN-aware median — the standard central tendency for lognormal chlorophyll), `select_time()`, `select_bbox()`, `to_dict`/`from_dict`, `to_json`/`from_json`, deterministic lognormal `synthetic()` with an engineered cloud mask) |
+| CLI | `fetch-oceancolor --bbox … --start … --end … [--product chlorophyll-a] [--cadence monthly|weekly|daily] [--sensor modis-aqua|viirs-snpp|multi] [--source coastwatch|obpg|cmems|auto] [--stride N] [--refresh]`, `oceancolor-synthetic` |
+| Interop | Consumed by the `oceancolor` source in survey-viz (`ocean-color` variable, log-scaled renderer); `OceanColorField.values` duck-types into the scalar-grid path |
+
+Access status (recorded 2026-09-27):
+
+- The CoastWatch ERDDAP was unreachable from the build environment
+  during verification: `https://coastwatch.noaa.gov/erddap/` returned
+  HTTP 503 and griddap probes returned 502/503 (the legacy
+  `coastwatch.pfeg.noaa.gov` host is decommissioned — empty replies).
+  Dataset IDs, grid geometry, and the griddap query grammar above are
+  corroborated from the CoastWatch tutorials repo, the CoastWatch WMS
+  dataset list, and NOAA sanctuary caption pages; the identical
+  `.das` → griddap-subset request grammar was exercised successfully
+  against a live ERDDAP server (NCEI) in the same session.
+- A successful end-to-end CoastWatch data pull still needs a re-run
+  once the service recovers — the adapter is written so it does
+  exactly that.
+- The OBPG fallback could not be live-verified in the build
+  environment: no Earthdata credentials were available, and the
+  CoastWatch outage meant the fallback chain was never exercised
+  end-to-end. The filename convention was verified against real CMR
+  granule titles (e.g. `AQUA_MODIS.20020704_20250228.L3m.CU.CHL.chlor_a.4km.nc`)
+  and the CMR collection record; the parser is defensive against the
+  documented SeaDAS L3 mapped structure (2-D/3-D `chlor_a`,
+  `scale_factor`/`add_offset`, `_FillValue`) and is unit-tested against
+  synthetic SeaDAS-shaped files. Provenance records `live_verified:
+  false` until a credentialed run succeeds.
+- The CMEMS path was not live-tested (no CMEMS credentials in the
+  build environment); its dataset ID is taken from the Nov-2025
+  CMEMS ocean-colour QUID
+  (CMEMS-OC-QUID-009-101to104-111-113-116-118) and can be overridden
+  via `cmems_dataset_id`; it is an optional extra source, not the
+  required fallback.
+
 ## Choosing a source
 
 - **US Great Lakes / coasts, no signup:** NOAA OFS (LMHOFS for Lake

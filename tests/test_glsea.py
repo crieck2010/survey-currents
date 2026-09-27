@@ -502,7 +502,7 @@ def test_package_exports():
                  "validate_glsea_bbox", "glsea_sst_url", "glsea_averages_url"):
         assert name in currents.__all__
         assert hasattr(currents, name)
-    assert currents.__version__ == "0.13.0"
+    assert currents.__version__ == "0.14.0"
 
 
 def test_cli_has_glsea_subcommands():

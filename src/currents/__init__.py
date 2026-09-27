@@ -17,7 +17,7 @@ the ``pip install`` extra.
 
 from __future__ import annotations
 
-__version__ = "0.13.0"
+__version__ = "0.14.0"
 
 from .basemaps import (GEBCO_NATIVE_ARCSEC, GEBCO_VERSION, GEBCO_ZIP_URL,
                        NATURAL_EARTH_LAYERS, NATURAL_EARTH_SCALES, TopoField,
@@ -83,6 +83,19 @@ from .streamgages import (FT_TO_M, FT3S_TO_M3S, USGS_DV_BASE,
                           USGS_SITE_LIMIT, GageField, GageRecord,
                           dv_request_url, fetch_usgs, site_inventory_url,
                           usgs_cache_dir)
+from .oceancolor import (CMEMS_OCEANCOLOR_PRODUCT,
+                         CMEMS_OCEANCOLOR_VARIABLE,
+                         COASTWATCH_DATASETS, COASTWATCH_ERDDAP_BASE,
+                         OBPG_CMR_COLLECTION_ID, OBPG_CMR_SHORT_NAME,
+                         OBPG_DIRECTACCESS_BASE, OBPG_RECORD_START,
+                         OCEANCOLOR_LAT_MAX, OCEANCOLOR_LAT_MIN,
+                         OCEANCOLOR_LON_MAX, OCEANCOLOR_LON_MIN,
+                         OCEANCOLOR_MAX_CACHE_AGE_DAYS, OCEANCOLOR_UNITS,
+                         OCEANCOLOR_VAR, OceanColorField,
+                         fetch_oceancolor, fetch_oceancolor_cmems,
+                         fetch_oceancolor_coastwatch, fetch_oceancolor_obpg,
+                         main_demo, obpg_file_names, oceancolor_cache_dir,
+                         oceancolor_urls)
 
 __all__ = [
     "CurrentField",
@@ -253,6 +266,29 @@ __all__ = [
     "GEBCO_NATIVE_ARCSEC",
     "NATURAL_EARTH_SCALES",
     "NATURAL_EARTH_LAYERS",
+    "OceanColorField",
+    "fetch_oceancolor",
+    "fetch_oceancolor_coastwatch",
+    "fetch_oceancolor_cmems",
+    "fetch_oceancolor_obpg",
+    "obpg_file_names",
+    "oceancolor_urls",
+    "oceancolor_cache_dir",
+    "OBPG_DIRECTACCESS_BASE",
+    "OBPG_CMR_COLLECTION_ID",
+    "OBPG_CMR_SHORT_NAME",
+    "OBPG_RECORD_START",
+    "COASTWATCH_ERDDAP_BASE",
+    "COASTWATCH_DATASETS",
+    "CMEMS_OCEANCOLOR_PRODUCT",
+    "CMEMS_OCEANCOLOR_VARIABLE",
+    "OCEANCOLOR_VAR",
+    "OCEANCOLOR_UNITS",
+    "OCEANCOLOR_LON_MIN",
+    "OCEANCOLOR_LON_MAX",
+    "OCEANCOLOR_LAT_MIN",
+    "OCEANCOLOR_LAT_MAX",
+    "OCEANCOLOR_MAX_CACHE_AGE_DAYS",
     "PROVENANCE_VERSION",
     "read_provenance",
     "verify_provenance",

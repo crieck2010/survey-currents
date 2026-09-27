@@ -480,6 +480,36 @@ Operational notes:
   variable with no adapter and an honest refusal, rather than
   misrouting to the daily lights product.
 
+## 12. GEBCO 2024 + Natural Earth — global topography/bathymetry and cartographic vectors (no account)
+
+Basemap layers: GEBCO 2024 global terrain (15 arc-second grid, elevations
+in metres, positive up) and Natural Earth coastline/country vectors for
+context underlays. Neither needs an account.
+
+| Item | Value |
+|---|---|
+| GEBCO archive | `https://www.bodc.ac.uk/data/open_download/gebco/gebco_2024/geotiff/` → redirects to a CEDA-hosted `gebco_2024_geotiff.zip` (~4.26 GB). Verified live 2026-09-27: anonymous HTTPS, byte-range requests honored (206). No login, no API key |
+| GEBCO layout | Zip holds eight 90°×90° stripped, uncompressed int16 GeoTIFFs (`gebco_2024_n90.0_s0.0_w-180.0_e-90.0.tif`, …), each ~495–577 MB compressed / 933,255,948 bytes uncompressed (21600×21600 px, 15 arc-second; 21600 one-row strips) |
+| GEBCO access | **Per-tile ranged extraction**: the adapter parses the zip central directory with a few KB of range requests, then downloads only the tile entries intersecting the bbox (no 4.26 GB download). Extracted tiles are cached locally with SHA-256 sidecars, verified on every hit, re-fetched on corruption |
+| GEBCO grid | 15 arc-second lattice (tag layout verified against a real tile entry 2026-09-27: stripped uncompressed int16, positive Y pixel scale per the GeoTIFF spec, ModelPixelScaleTag, tiepoint, SampleFormat checked; window reads verified on the live tile); output grids are snapped to it and mosaicked with exact integer index math, so adjacent tiles butt-join without seams. `resolution="15s"` (native) or a degree value that is an integer multiple of 15 arc-seconds **and** divides the 90° tiles (e.g. `0.25`, `0.5`, `1.0`); coarser grids are block-averaged (mean). Native resolution has a 8192 px safety cap per axis — request a coarser grid for continental extents |
+| GEBCO record | Static compilation (2024 release; GEBCO 2025 exists but has no confirmed keyless open-download path). The field carries one structural timestamp so renderers keep their 3D-field contract; `provenance["static_compilation"]` is `True` |
+| Model | `TopoField` — `times` (single structural step) / `lats` / `lons` / `values` (metres, positive up), `select_bbox`, `to_json`/`from_json`, deterministic `synthetic()` |
+| Natural Earth | `https://naturalearth.s3.amazonaws.com/{110m,50m,10m}_{physical,cultural}/ne_*.zip` — anonymous S3, verified live 2026-09-27. Scales `110m`/`50m`/`10m`; layers `coastline` (polylines) and `countries` (polygons). Zips cached with the same SHA-256 discipline; shapefiles parsed with a minimal stdlib reader (no fiona/geopandas) and clipped to the bbox |
+| CLI | `fetch-gebco --bbox … --resolution 0.25`, `fetch-naturalearth --bbox … --scale 110m --layers coastline,countries`, `basemaps-synthetic` |
+
+Operational notes:
+
+- The reader is file-backed: only the IFD and the compressed internal
+  tiles intersecting the window are read, so a full 90° tile never has to
+  sit in RAM.
+- `fetch_gebco` returns deterministic output for any bbox; cells are
+  NaN only where the source grid has no data (not expected — GEBCO
+  2024 has full global coverage, and every land/ocean point on Earth
+  is inside some tile).
+- Natural Earth vectors are cartographic context, not a data variable:
+  `survey-viz` keeps them as an underlay and refuses "country borders"
+  alone with an honest no-product response.
+
 ## Choosing a source
 
 - **US Great Lakes / coasts, no signup:** NOAA OFS (LMHOFS for Lake

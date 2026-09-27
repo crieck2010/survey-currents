@@ -4,6 +4,47 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.10.0] - 2026-09-27
+
+### Added
+- GEBCO 2024 + Natural Earth basemap adapter (`src/currents/basemaps.py`):
+  `fetch_gebco(bbox, resolution="15s")` -> `TopoField` and
+  `fetch_naturalearth(bbox, scale="110m", layers=("coastline", "countries"))`
+  -> dict of GeoJSON FeatureCollections. **Verified live 2026-09-27:**
+  the keyless open-download route is
+  `https://www.bodc.ac.uk/data/open_download/gebco/gebco_2024/geotiff/`
+  (redirects to a CEDA-hosted `gebco_2024_geotiff.zip`, ~4.26 GB,
+  anonymous HTTPS, byte-range requests honored). The zip holds eight
+  90°×90° stripped uncompressed int16 GeoTIFFs (~495–577 MB
+  compressed / 933,255,948 bytes uncompressed each, 21600×21600 px at
+  15 arc-second; layout verified against a real tile 2026-09-27:
+  21600 one-row strips, positive Y pixel scale per the GeoTIFF spec).
+  The adapter parses the zip central directory with a
+  few KB of range requests and downloads **only the tile entries
+  intersecting the bbox** — no 4.26 GB download. Tiles are cached
+  locally with SHA-256 sidecars (verified on every hit, re-fetched on
+  corruption). A minimal stdlib GeoTIFF reader (file-backed:
+  only the IFD and intersecting strips/tiles are read; handles the
+  official stripped-uncompressed layout as well as tiled deflate)
+  subsets natively and block-averages to coarser grids; output grids
+  snap to the 15 arc-second lattice and mosaic with exact integer
+  index math (antimeridian wraps handled in unwrapped longitude
+  space), so tiles butt-join without seams. `resolution="15s"` or a
+  degree value that is a multiple of 15 arc-seconds and divides the
+  90° tiles (`0.25`, `0.5`, `1.0`, …); native resolution has an 8192
+  px safety cap per axis. `TopoField` carries one structural timestamp
+  (`2024-01-01T00:00:00Z`, the grid's release year) so existing
+  renderers keep their 3D-field contract, with
+  `provenance["static_compilation"] = True`, the grid version, the
+  requested subset bbox, and the snapped output grid.
+  Natural Earth zips come from anonymous S3
+  (`https://naturalearth.s3.amazonaws.com`, verified live 2026-09-27),
+  cached with the same SHA-256 discipline; shapefiles are parsed with
+  a minimal stdlib reader (no fiona/geopandas) and clipped to the
+  bbox. 38 offline tests (`tests/test_basemaps.py`).
+- CLI: `fetch-gebco`, `fetch-naturalearth`, `basemaps-synthetic`
+  (deterministic synthetic topography, offline).
+
 ## [0.9.0] - 2026-09-27
 
 ### Added

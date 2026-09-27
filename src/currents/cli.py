@@ -328,6 +328,46 @@ def cmd_sst_synthetic(a: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_fetch_gebco(a: argparse.Namespace) -> int:
+    from .basemaps import fetch_gebco
+    field = fetch_gebco(_parse_bbox(a.bbox), resolution=a.resolution)
+    path = f"{a.out.rstrip('/')}.json"
+    field.to_json(path)
+    ny, nx = field.elevation.shape[0], field.elevation.shape[1]
+    print(f"fetched GEBCO topography field ({ny}x{nx} cells, "
+          f"resolution={field.resolution}°) -> {path}")
+    print(f"source={field.source} units={field.units} bounds={field.bounds}")
+    print(f"tiles={len(field.provenance.get('tiles', []))}")
+    return 0
+
+
+def cmd_fetch_naturalearth(a: argparse.Namespace) -> int:
+    from .basemaps import fetch_naturalearth
+    layers = tuple(s.strip() for s in a.layers.split(",") if s.strip())
+    collections = fetch_naturalearth(_parse_bbox(a.bbox), scale=a.scale,
+                                     layers=layers)
+    import json as _json
+    for layer, fc in collections.items():
+        path = f"{a.out.rstrip('/')}_{layer}.geojson"
+        with open(path, "w", encoding="utf-8") as fh:
+            _json.dump(fc, fh)
+        print(f"wrote Natural Earth {layer} "
+              f"({len(fc['features'])} features) -> {path}")
+    return 0
+
+
+def cmd_basemaps_synthetic(a: argparse.Namespace) -> int:
+    from .basemaps import TopoField
+    field = TopoField.synthetic(bbox=_parse_bbox(a.bbox),
+                                resolution=a.resolution, seed=a.seed,
+                                source=a.source)
+    path = f"{a.out.rstrip('/')}.json"
+    field.to_json(path)
+    ny, nx = field.elevation.shape[0], field.elevation.shape[1]
+    print(f"wrote synthetic topography field ({ny}x{nx} cells) -> {path}")
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="survey-currents",
                                 description="Surface-current / water-temperature acquisition engine")
@@ -524,6 +564,41 @@ def build_parser() -> argparse.ArgumentParser:
                    help="source label recorded on the field")
     s.add_argument("--out", default="sst_synthetic", help="output path prefix")
     s.set_defaults(func=cmd_sst_synthetic)
+
+    s = sub.add_parser("fetch-gebco",
+                       help="fetch GEBCO 2024 topography/bathymetry subset "
+                            "(needs network; tiles cached locally)")
+    s.add_argument("--bbox", required=True, help="min_lon,min_lat,max_lon,max_lat "
+                   "(conventional -180..180; antimeridian-crossing boxes wrap)")
+    s.add_argument("--resolution", default="0.25",
+                   help="output grid spacing: '15s' native or degrees "
+                        "(default 0.25; must be a multiple of 15 arc-seconds "
+                        "that divides the 90° tiles, e.g. 0.25, 0.5, 1.0)")
+    s.add_argument("--out", default="gebco_topo", help="output path prefix")
+    s.set_defaults(func=cmd_fetch_gebco)
+
+    s = sub.add_parser("fetch-naturalearth",
+                       help="fetch Natural Earth coastline/countries vectors "
+                            "(needs network; zips cached locally)")
+    s.add_argument("--bbox", required=True, help="min_lon,min_lat,max_lon,max_lat")
+    s.add_argument("--scale", default="110m",
+                   help="Natural Earth scale: 110m, 50m, or 10m (default 110m)")
+    s.add_argument("--layers", default="coastline,countries",
+                   help="comma-separated: coastline, countries (default both)")
+    s.add_argument("--out", default="naturalearth", help="output path prefix")
+    s.set_defaults(func=cmd_fetch_naturalearth)
+
+    s = sub.add_parser("basemaps-synthetic",
+                       help="write a deterministic synthetic topography field (offline)")
+    s.add_argument("--bbox", default="-125.0,25.0,-66.0,49.0",
+                   help="min_lon,min_lat,max_lon,max_lat")
+    s.add_argument("--resolution", type=float, default=1.0,
+                   help="synthetic grid resolution in degrees (default 1.0)")
+    s.add_argument("--seed", type=int, default=7)
+    s.add_argument("--source", default="synthetic",
+                   help="source label recorded on the field")
+    s.add_argument("--out", default="topo_synthetic", help="output path prefix")
+    s.set_defaults(func=cmd_basemaps_synthetic)
 
     s = sub.add_parser("fetch-era5",
                        help="fetch Copernicus ERA5 hourly reanalysis grids "

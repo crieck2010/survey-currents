@@ -17,8 +17,13 @@ the ``pip install`` extra.
 
 from __future__ import annotations
 
-__version__ = "0.8.0"
+__version__ = "0.10.0"
 
+from .basemaps import (GEBCO_NATIVE_ARCSEC, GEBCO_VERSION, GEBCO_ZIP_URL,
+                       NATURAL_EARTH_LAYERS, NATURAL_EARTH_SCALES, TopoField,
+                       ensure_gebco_tile, ensure_naturalearth_zip,
+                       fetch_gebco, fetch_naturalearth, gebco_tiles_for_bbox,
+                       synthetic_naturalearth)
 from .currents_global import (
     CMEMS_CURRENTS_PRESET, CMEMS_CURRENTS_VARIABLES, OSCAR_COLLECTIONS,
     OSCAR_DIM_ORDER, OSCAR_FINAL_MAX_AGE_DAYS, OSCAR_GRANULE_STEMS,
@@ -170,6 +175,18 @@ __all__ = [
     "oscar_subset_urls",
     "oscar_synthetic",
     "cmems_currents_synthetic",
+    "TopoField",
+    "fetch_gebco",
+    "fetch_naturalearth",
+    "ensure_gebco_tile",
+    "ensure_naturalearth_zip",
+    "gebco_tiles_for_bbox",
+    "synthetic_naturalearth",
+    "GEBCO_VERSION",
+    "GEBCO_ZIP_URL",
+    "GEBCO_NATIVE_ARCSEC",
+    "NATURAL_EARTH_SCALES",
+    "NATURAL_EARTH_LAYERS",
     "PROVENANCE_VERSION",
     "read_provenance",
     "verify_provenance",

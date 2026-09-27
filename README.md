@@ -19,6 +19,8 @@ Surface-current and water-temperature acquisition engine for surveying and remot
 | CMEMS global ocean physics (`global-physics-daily` preset) | Free CMEMS account | **Global ocean currents** | 1/12° (~9 km) | daily analysis+forecast |
 | NASA GPM IMERG V07 via GES DISC HTTPS | Free Earthdata Login | **Global precipitation** | 0.1° (~10 km) | half-hourly, 2000–present (Early/Late/Final runs) |
 | NASA Black Marble VNP46A2 V002 via LAADS DAAC | Free Earthdata Login | **Global night lights** | 15″ native, 0.05° default output | daily DNB radiance, 2012–present |
+| GEBCO 2024 via BODC/CEDA open download (per-tile ranged extraction) | No signup | **Global topography/bathymetry** | 15″ native; block-averaged outputs | static 2024 compilation |
+| Natural Earth via anonymous S3 | No signup | **Global coastline/country vectors** | 110m/50m/10m cartographic scales | static |
 
 Registered NOAA models include **GLOFS** (Great Lakes, 5 km, 60 h), **LMHOFS** (Lake Michigan/Huron, 50 m–2.5 km, 120 h — the source of the Lake Michigan reel), LEOFS, CBOFS, DBOFS, GoMOFS, WCOFS, NGOFS2, SFBOFS, TBOFS, CIOFS, CREOFS, SSCOFS. Full table in `docs/DATA_SOURCES.md`.
 
@@ -151,6 +153,12 @@ survey-currents fires-synthetic --n 60 --out fires_demo
 survey-currents fetch-imerg --bbox=-125,25,-66,49 \
     --start 2024-01-01 --end 2024-01-07 --run late --out conus_rain
 survey-currents rain-synthetic --out rain_demo
+# GEBCO 2024 topography/bathymetry + Natural Earth vectors (no account):
+survey-currents fetch-gebco --bbox=-125,25,-66,49 --resolution 0.25 \
+    --out conus_topo
+survey-currents fetch-naturalearth --bbox=-125,25,-66,49 \
+    --scale 110m --layers coastline,countries --out conus_ne
+survey-currents basemaps-synthetic --out topo_demo
 ```
 
 ## The canonical model

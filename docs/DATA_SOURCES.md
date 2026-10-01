@@ -683,26 +683,27 @@ is surfaced.
 
 ## 18. NOAA GFS 0.25° — 10-m winds + 2-m air temperature (no account)
 
-The Global Forecast System f000 **analysis** snapshots via NCEP's
-NOMADS GRIB filter (`filter_gfs_0p25.pl`) — **keyless HTTPS, no
-account, no token**. This is the program's keyless wind source for
-unattended automation (OSCAR, CMEMS, ERA5/CDS, and FIRMS all need
-credentials).
+The Global Forecast System via NCEP's NOMADS GRIB filter
+(`filter_gfs_0p25.pl`) — **keyless HTTPS, no account, no token**. This
+is the program's keyless wind source for unattended automation
+(OSCAR, CMEMS, ERA5/CDS, and FIRMS all need credentials). Since
+v0.17.0 the adapter fetches the **hourly forecast steps f000–f120**,
+not just the f000 analysis.
 
 | Item | Value |
 |---|---|
-| Endpoint | `https://nomads.ncep.noaa.gov/cgi-bin/filter_gfs_0p25.pl?dir=/gfs.YYYYMMDD/HH/atmos&file=gfs.t{HH}z.pgrb2.0p25.f000&subregion=on&leftlon=..&rightlon=..&toplat=..&bottomlat=..&lev_10_m_above_ground=on&var_UGRD=on&var_VGRD=on&lev_2_m_above_ground=on&var_TMP=on` |
+| Endpoint | `https://nomads.ncep.noaa.gov/cgi-bin/filter_gfs_0p25.pl?dir=/gfs.YYYYMMDD/HH/atmos&file=gfs.t{HH}z.pgrb2.0p25.f{HHH}&subregion=on&leftlon=..&rightlon=..&toplat=..&bottomlat=..&lev_10_m_above_ground=on&var_UGRD=on&var_VGRD=on&lev_2_m_above_ground=on&var_TMP=on` |
 | Access | Keyless HTTPS. Live-verified 2026-10-01: HTTP 200 for 2026-09-22…2026-10-01 (10 days), HTTP 404 for 2026-09-21. NOMADS retired the DODS/OpenDAP interface in 2025 (NWS SCN 25-81) — the GRIB filter CGI is the working keyless path |
-| Cycles | `00`/`06`/`12`/`18` UTC analyses; `f000` is the analysis, not a forecast |
+| Cycles | `00`/`06`/`12`/`18` UTC; `f000` is the analysis, `f001`–`f120` are hourly forecast steps (verified live 2026-10-01: f001 and f006 both HTTP 200 through the same filter path) |
 | Variables | `10u`/`10v` → `u10`/`v10` 10-m wind components (m/s); `2t` → `t2m` 2-m air temperature (Kelvin on the wire, °C on the field). `GfsWindField.air_temperature` exposes °F (the warming.watch strand-color convention survey-viz's `dark_strands` reads) |
 | Subsetting | `subregion=on` makes the filter honor the bbox (verified 2026-10-01: without it the filter silently returns the full 1440×721 global grid). The adapter still verifies the returned grid covers the requested window and crops locally with numpy; antimeridian-crossing bboxes split into two subregion requests and concatenate along longitude |
 | Parsing | `cfgrib.messages.FileStream` iteration — `cfgrib.open_file` fails on these payloads (mixed 10-m/2-m levels break its dataset builder). Lazy import: `pip install 'survey-currents[gfs]'` |
 | Access pattern | Payloads cached under `$SURVEY_CURRENTS_CACHE/gfs-wind` (atomic writes, SHA-256 sidecars; analyses are immutable once posted, so entries never expire); cache key covers the full request URL |
-| Retention | ~10 days (`GFS_RETENTION_DAYS`, verified 2026-10-01). Dates outside the window and not-yet-posted cycles raise `UnavailableRangeError` — never silent padding. A message whose data date/cycle mismatches the request is refused rather than mislabeled |
-| Per-day size | KB-scale for regional bboxes (a North-America box is ~100–200 KB/day — the subregion request, not the 2.4 MB full-globe fallback) |
-| Query | `fetch_gfs_wind(bbox, start, end, stride_days=1, cycle="00", work_dir=...)`; `gfs_filter_url(day, cycle, window)` builds the exact URL offline |
+| Retention | ~10 days (`GFS_RETENTION_DAYS`, verified 2026-10-01). Dates outside the window and not-yet-posted cycles raise `UnavailableRangeError` — never silent padding. A missing `(day, hour)` is never skipped or padded either: the fetch raises naming the exact URL. A message whose data date/cycle or forecast step mismatches the request is refused rather than mislabeled |
+| Per-step size | ~110 KB per hourly file for a North-America box when the subregion is honored (measured live 2026-10-01: 109,278 bytes, 101×261 grid for −130…−65, 25…50). If the filter ignores the subregion it silently returns the full 1440×721 globe at ~2.4 MB/file (the adapter still refuses to mislabel it). Honest scale cost: a full 121-step (f000–f120) day is ~13 MB for the North-America box, ~290 MB worst-case at full-globe fallback — the caller (reel pipeline, CLI) owns the frame budget |
+| Query | `fetch_gfs_wind(bbox, start, end, stride_days=1, cycle="00", forecast_hours=(0,), work_dir=...)`; `gfs_filter_url(day, cycle, window, forecast_hour=0)` builds the exact URL offline |
 | Model | `GfsWindField` (Era5Field-shaped: `grids`/`times`/`lats`/`lons`, `values` = wind speed, `overlay_grids` = `{"t2m": …}`, plus `air_temperature`/`temperature_unit` for the viz wind path; `select_time()`, `select_bbox()`, JSON round-trip, deterministic `synthetic()`) |
-| CLI | `fetch-gfs-wind --bbox … --start … --end … [--stride-days 1] [--cycle 00] [--work-dir …] [--out …]`, `gfs-wind-synthetic` |
+| CLI | `fetch-gfs-wind --bbox … --start … --end … [--stride-days 1] [--cycle 00] [--forecast-hours 0] [--work-dir …] [--out …]`, `gfs-wind-synthetic` |
 | Interop | Consumed by the `gfs-wind` source in reel-studio (`wind` variable, keyless); survey-viz's `dark_strands`/`dark_flow` presets read `grids["u10"]`/`grids["v10"]` and color wind strands by `air_temperature` (°F) |
 
 ## Choosing a source
@@ -748,9 +749,9 @@ credentials).
   pressure patterns around a storm), ERA5 remains the answer
   (see `currents.storms`).
 - **Global 10-m winds + 2-m air temperature, no signup (recent ~10
-  days):** NOAA GFS 0.25° f000 analyses via the keyless NOMADS GRIB
-  filter — the answer for unattended wind-strand automation, where the
-  credentialed sources above cannot run. For long-record or
+  days):** NOAA GFS 0.25° hourly forecast steps (f000–f120) via the
+  keyless NOMADS GRIB filter — the answer for unattended wind-strand
+  automation, where the credentialed sources above cannot run. For long-record or
   multi-decade wind climatology, ERA5 remains the answer (1940–present
   reanalysis).
 - **Terrestrial water storage / groundwater anomalies, no signup:**

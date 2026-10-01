@@ -405,13 +405,17 @@ def cmd_usgs_synthetic(a: argparse.Namespace) -> int:
 
 def cmd_fetch_gfs_wind(a: argparse.Namespace) -> int:
     from .gfs_wind import fetch_gfs_wind
+    hour_spec = getattr(a, "forecast_hours", "0")
+    forecast_hours = tuple(int(h) for h in str(hour_spec).split(",")
+                           if h.strip() != "")
     field = fetch_gfs_wind(_parse_bbox(a.bbox), a.start, a.end,
                            stride_days=a.stride_days, cycle=a.cycle,
+                           forecast_hours=forecast_hours,
                            work_dir=a.work_dir or None)
     path = f"{a.out.rstrip('/')}.json"
     field.to_json(path)
-    print(f"fetched GFS 10-m wind field ({len(field.times)} daily f{field.cycle}z "
-          f"analyses, cycle={field.cycle}) -> {path}")
+    print(f"fetched GFS 10-m wind field ({len(field.times)} timesteps, "
+          f"cycle={field.cycle}, hours={sorted(forecast_hours)}) -> {path}")
     print(f"source={field.source} bounds={field.bounds}")
     print(f"mean wind speed (t0)={field.spatial_mean('wind', 0):.2f} m/s "
           f"mean 2m air temp (t0)={field.spatial_mean('air_temperature', 0):.1f} F")
@@ -908,6 +912,10 @@ def build_parser() -> argparse.ArgumentParser:
                    help="day sampling stride, >= 1 (default: 1)")
     s.add_argument("--cycle", default="00",
                    help="GFS analysis cycle: 00/06/12/18 (default: 00)")
+    s.add_argument("--forecast-hours", default="0",
+                   help="comma-separated forecast hours per day, 0..120 "
+                        "(default: 0 = f000 analysis; e.g. '0,1,6' for a "
+                        "sub-daily series)")
     s.add_argument("--work-dir", default="",
                    help="GRIB cache dir (default: $SURVEY_CURRENTS_CACHE/gfs-wind)")
     s.add_argument("--out", default="gfs_wind", help="output path prefix")

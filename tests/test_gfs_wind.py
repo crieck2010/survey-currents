@@ -1,9 +1,11 @@
 """Tests for currents.gfs_wind — fully offline.
 
-Live-network tests are never in this suite: the recorded GRIB2 fixture
+Live-network tests are never in this suite: the recorded GRIB2 fixtures
 (``tests/fixtures/gfs_wind_20261001_5x5.grib2`` — a real 2026-10-01 00z
-f000 NOMADS subregion response, 2t/10u/10v over -100..-99, 40..41)
-covers parsing, and the HTTP layer is mocked for fetch tests. Tests that
+f000 NOMADS subregion response, 2t/10u/10v over -100..-99, 40..41 — and
+``tests/fixtures/gfs_wind_20261001_f001_5x5.grib2``, the same window's
+f001 hourly step, recorded live 2026-10-01)
+cover parsing, and the HTTP layer is mocked for fetch tests. Tests that
 need cfgrib skip cleanly when it is not installed.
 """
 
@@ -33,12 +35,19 @@ from currents.gfs_wind import (
 
 FIXTURE = os.path.join(os.path.dirname(__file__), "fixtures",
                        "gfs_wind_20261001_5x5.grib2")
+F001_FIXTURE = os.path.join(os.path.dirname(__file__), "fixtures",
+                            "gfs_wind_20261001_f001_5x5.grib2")
 FIXTURE_DATE = dt.date(2026, 10, 1)
 FIXTURE_BBOX = (-100.0, 40.0, -99.0, 41.0)
 
 
 def _fixture_bytes() -> bytes:
     with open(FIXTURE, "rb") as fh:
+        return fh.read()
+
+
+def _f001_fixture_bytes() -> bytes:
+    with open(F001_FIXTURE, "rb") as fh:
         return fh.read()
 
 
@@ -58,6 +67,38 @@ def test_filter_url_exact():
         + "&lev_10_m_above_ground=on&var_UGRD=on&var_VGRD=on"
         + "&lev_2_m_above_ground=on&var_TMP=on"
     )
+
+
+def test_filter_url_exact_f001():
+    # The recorded f001 fixture was fetched with exactly this URL.
+    url = gfs_filter_url(FIXTURE_DATE, "00", FIXTURE_BBOX, forecast_hour=1)
+    assert url == (
+        NOMADS_FILTER_BASE
+        + "?dir=/gfs.20261001/00/atmos"
+        + "&file=gfs.t00z.pgrb2.0p25.f001"
+        + "&subregion=on"
+        + "&leftlon=-100.0&rightlon=-99.0&toplat=41.0&bottomlat=40.0"
+        + "&lev_10_m_above_ground=on&var_UGRD=on&var_VGRD=on"
+        + "&lev_2_m_above_ground=on&var_TMP=on"
+    )
+
+
+def test_filter_url_hourly_filename_segments():
+    # Zero-padded 3-digit forecast steps (verified live 2026-10-01).
+    url1 = gfs_filter_url(FIXTURE_DATE, "00", FIXTURE_BBOX, forecast_hour=1)
+    assert "file=gfs.t00z.pgrb2.0p25.f001" in url1
+    assert "dir=/gfs.20261001/00/atmos" in url1
+    url23 = gfs_filter_url(FIXTURE_DATE, "12", FIXTURE_BBOX, forecast_hour=23)
+    assert "file=gfs.t12z.pgrb2.0p25.f023" in url23
+    url120 = gfs_filter_url(FIXTURE_DATE, "18", FIXTURE_BBOX, forecast_hour=120)
+    assert "file=gfs.t18z.pgrb2.0p25.f120" in url120
+
+
+def test_filter_url_rejects_out_of_range_hour():
+    with pytest.raises(ValueError):
+        gfs_filter_url(FIXTURE_DATE, "00", FIXTURE_BBOX, forecast_hour=121)
+    with pytest.raises(ValueError):
+        gfs_filter_url(FIXTURE_DATE, "00", FIXTURE_BBOX, forecast_hour=-1)
 
 
 def test_filter_url_uses_subregion_and_f000():
@@ -218,45 +259,60 @@ def test_crop_to_window_snaps_to_grid():
 
 
 def _mock_cached_get(monkeypatch, tmp_path, payload=None, calls=None):
-    """Replace the HTTP + parse layers: serve the fixture, record the URLs.
+    """Replace the HTTP + parse layers: serve the fixtures, record the URLs.
 
     ``_cached_get_bytes`` serves the recorded fixture bytes for every
-    URL (so URL construction, provenance hashes, and the cache are
-    exercised for real). ``_parse_grib_payload`` is stubbed to build
-    grids consistent with the *requested* window/date/cycle out of the
-    fixture's values: for the exact fixture URL the real parser runs
-    (proving the fixture parses end-to-end); for other windows the stub
-    mirrors the real parser's contract (lats increasing, lons -180..180,
-    wrong-day RuntimeError) without needing a distinct recorded payload
-    per window.
+    URL (f000 bytes, or the recorded f001 bytes when the URL names
+    ``f001``), so URL construction, provenance hashes, and the cache
+    are exercised for real. ``_parse_grib_payload`` is stubbed to build
+    grids consistent with the *requested* window/date/cycle/hour out of
+    the fixture's values: for the exact recorded (window, day, cycle,
+    hour) triples the real parser runs (proving the fixtures parse
+    end-to-end); for other windows/hours the stub mirrors the real
+    parser's contract (lats increasing, lons -180..180, ``valid_time``
+    = cycle + forecast hour) without needing a distinct recorded
+    payload per combination.
     """
     payload = _fixture_bytes() if payload is None else payload
+    f001_payload = _f001_fixture_bytes()
     seen = [] if calls is None else calls
     real_parse = gfs_wind._parse_grib_payload
 
     def fake_get(url, cache_dir):
         seen.append(url)
+        if "f001" in url:
+            return f001_payload, False
         return payload, False
 
-    def fake_parse(payload_bytes, url, day, cycle):
+    def fake_parse(payload_bytes, url, day, cycle, forecast_hour=0):
         if (f"dir=/gfs.{FIXTURE_DATE.strftime('%Y%m%d')}/{cycle}/atmos" in url
-                and "leftlon=-100.0&rightlon=-99.0" in url):
-            return real_parse(payload_bytes, url, day, cycle)
+                and "leftlon=-100.0&rightlon=-99.0" in url
+                and day == FIXTURE_DATE
+                and forecast_hour in (0, 1)):
+            # Recorded triples: f000 (2026-10-01 00z) and f001
+            # (2026-10-01 00z) fixtures, parsed for real.
+            want = f001_payload if forecast_hour == 1 else payload
+            return real_parse(want, url, day, cycle,
+                              forecast_hour=forecast_hour)
         # Stub: derive the window from the URL and reuse the fixture's
-        # values (the real parser's wrong-day/missing-variable/crooked-
-        # region refusals are covered against real bytes above; the stub
-        # only exercises fetch plumbing).
+        # values (the real parser's wrong-day/wrong-step refusals are
+        # covered against real bytes below; the stub only exercises
+        # fetch plumbing).
         import urllib.parse as _up
         q = _up.parse_qs(_up.urlparse(url).query)
         minx, maxx = float(q["leftlon"][0]), float(q["rightlon"][0])
         miny, maxy = float(q["bottomlat"][0]), float(q["toplat"][0])
-        ref = real_parse(payload_bytes, url, FIXTURE_DATE, "00")
+        ref = real_parse(payload, url, FIXTURE_DATE, "00", forecast_hour=0)
         lats = np.linspace(miny, maxy, 5)
         lons = np.linspace(minx, maxx, 5)
+        cycle_dt = dt.datetime(day.year, day.month, day.day, int(cycle),
+                               tzinfo=dt.timezone.utc)
+        valid = (cycle_dt + dt.timedelta(hours=forecast_hour)).isoformat()
         return {k: {"values": np.asarray(ref[k]["values"]),
                     "lats": lats, "lons": lons,
                     "data_date": day.strftime("%Y%m%d"),
-                    "data_time": cycle}
+                    "data_time": cycle,
+                    "valid_time": valid}
                 for k in ("u10", "v10", "t2m")}
 
     monkeypatch.setattr(gfs_wind, "_cached_get_bytes", fake_get)
@@ -281,6 +337,94 @@ def test_fetch_field_shape_units_and_times(monkeypatch, tmp_path):
     assert f.cycle == "00"
     # 2t converted Kelvin -> Celsius on ingest.
     assert 0.0 < f.grids["t2m"].mean() < 30.0
+
+
+def test_fetch_default_forecast_hours_is_f000_only():
+    # The default (0,) path is backwards compatible: one f000 analysis
+    # per sampled day, timestamps at the cycle hour.
+    import inspect
+    sig = inspect.signature(fetch_gfs_wind)
+    assert sig.parameters["forecast_hours"].default == (0,)
+
+
+def test_fetch_multi_hour_chronological_times(monkeypatch, tmp_path):
+    pytest.importorskip("cfgrib")
+    seen = _mock_cached_get(monkeypatch, tmp_path)
+    f = fetch_gfs_wind(FIXTURE_BBOX, "2026-10-01", "2026-10-01",
+                       cycle="00", forecast_hours=(0, 1, 6))
+    assert f.grids["u10"].shape == (3, 5, 5)
+    # Timestamps carry the forecast hour: valid time, not the cycle.
+    assert f.times == ["2026-10-01T00:00:00+00:00",
+                       "2026-10-01T01:00:00+00:00",
+                       "2026-10-01T06:00:00+00:00"]
+    # One NOMADS request per hour, exact filename segments.
+    assert len(seen) == 3
+    assert "gfs.t00z.pgrb2.0p25.f000" in seen[0]
+    assert "gfs.t00z.pgrb2.0p25.f001" in seen[1]
+    assert "gfs.t00z.pgrb2.0p25.f006" in seen[2]
+    # Provenance is per timestep: URL + SHA-256 + byte count each.
+    reqs = f.provenance["requests"]
+    assert [r["forecast_hour"] for r in reqs] == [0, 1, 6]
+    assert [r["url"] for r in reqs] == seen
+    assert all(r["sha256"] and r["n_bytes"] > 0 for r in reqs)
+    assert f.provenance["forecast_hours"] == [0, 1, 6]
+    assert f.provenance["n_requests"] == 3
+    assert f.provenance["n_bytes"] == sum(r["n_bytes"] for r in reqs)
+
+
+def test_fetch_forecast_hours_normalized_to_sorted_order(monkeypatch,
+                                                        tmp_path):
+    # Scrambled and duplicated input assembles chronologically.
+    pytest.importorskip("cfgrib")
+    _mock_cached_get(monkeypatch, tmp_path)
+    f = fetch_gfs_wind(FIXTURE_BBOX, "2026-10-01", "2026-10-01",
+                       forecast_hours=(6, 0, 1, 0))
+    assert f.times == ["2026-10-01T00:00:00+00:00",
+                       "2026-10-01T01:00:00+00:00",
+                       "2026-10-01T06:00:00+00:00"]
+    assert f.provenance["forecast_hours"] == [0, 1, 6]
+
+
+def test_fetch_multi_day_multi_hour_is_chronological(monkeypatch, tmp_path):
+    pytest.importorskip("cfgrib")
+    _mock_cached_get(monkeypatch, tmp_path)
+    f = fetch_gfs_wind(FIXTURE_BBOX, "2026-09-30", "2026-10-01",
+                       forecast_hours=(0, 6))
+    assert f.grids["u10"].shape == (4, 5, 5)
+    assert f.times == ["2026-09-30T00:00:00+00:00",
+                       "2026-09-30T06:00:00+00:00",
+                       "2026-10-01T00:00:00+00:00",
+                       "2026-10-01T06:00:00+00:00"]
+
+
+def test_forecast_hours_validation_rejects_bad_hours():
+    bad_hours = [(121,), (-1,), (1.5,), (True,), ("1",), ()]
+    for hours in bad_hours:
+        with pytest.raises(ValueError):
+            fetch_gfs_wind(FIXTURE_BBOX, "2026-09-30", "2026-10-01",
+                           forecast_hours=hours)
+    with pytest.raises(ValueError):
+        fetch_gfs_wind(FIXTURE_BBOX, "2026-09-30", "2026-10-01",
+                       forecast_hours=True)
+
+
+def test_parse_f001_fixture_carries_valid_time():
+    # The recorded f001 GRIB: dataDate/dataTime stay at the cycle, the
+    # valid time (cycle + 1h) is what lands on the times axis.
+    pytest.importorskip("cfgrib")
+    parsed = gfs_wind._parse_grib_payload(
+        _f001_fixture_bytes(), "fixture-url", FIXTURE_DATE, "00",
+        forecast_hour=1)
+    for key, part in parsed.items():
+        assert part["valid_time"] == "2026-10-01T01:00:00+00:00"
+        assert part["data_date"] == "20261001"
+        assert part["data_time"] == "00"
+    # The same bytes refused when parsed as the wrong step.
+    with pytest.raises(RuntimeError) as ei:
+        gfs_wind._parse_grib_payload(
+            _f001_fixture_bytes(), "fixture-url", FIXTURE_DATE, "00",
+            forecast_hour=0)
+    assert "stepRange" in str(ei.value)
 
 
 def test_fetch_kelvin_to_celsius_and_fahrenheit_conventions():
@@ -353,6 +497,42 @@ def test_fetch_http_404_becomes_unavailable_range_error(monkeypatch, tmp_path):
     with pytest.raises(UnavailableRangeError) as ei:
         fetch_gfs_wind(FIXTURE_BBOX, "2026-10-01", "2026-10-01")
     assert "404" in str(ei.value)
+
+
+def test_fetch_hour_404_becomes_unavailable_range_error(monkeypatch,
+                                                       tmp_path):
+    # A 404 on ONE (day, hour) must fail loudly with the exact URL —
+    # never skip the hour and never pad it silently.
+    pytest.importorskip("cfgrib")
+    import urllib.request
+
+    class Resp:
+        def __init__(self, payload):
+            self.payload = payload
+
+        def read(self):
+            return self.payload
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+    def selective(req, timeout=None):
+        if "f006" in req.full_url:
+            raise urllib.error.HTTPError(req.full_url, 404, "Not Found",
+                                         {}, None)
+        return Resp(_fixture_bytes())
+
+    monkeypatch.setattr(urllib.request, "urlopen", selective)
+    monkeypatch.setattr(gfs_wind, "gfs_cache_dir",
+                        lambda work_dir=None: str(tmp_path))
+    with pytest.raises(UnavailableRangeError) as ei:
+        fetch_gfs_wind(FIXTURE_BBOX, "2026-10-01", "2026-10-01",
+                       forecast_hours=(0, 6))
+    assert "404" in str(ei.value)
+    assert "f006" in str(ei.value)
 
 
 def test_fetch_uses_cache_on_second_call(monkeypatch, tmp_path):

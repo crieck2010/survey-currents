@@ -4,6 +4,46 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.17.0] - 2026-10-01
+
+### Added
+- Sub-daily (hourly) GFS winds (`src/currents/gfs_wind.py`):
+  `fetch_gfs_wind(..., forecast_hours=(0,))` — per sampled day the
+  adapter now fetches `gfs.t{CC}z.pgrb2.0p25.f{HHH}` for each hour in
+  the tuple (GFS 0.25° is hourly f000–f120; f001/f006 verified live
+  2026-10-01 through the same keyless NOMADS GRIB-filter path).
+  Default `(0,)` is the f000 analysis and behaves exactly as in
+  v0.16.0 (backwards compatible). Hours are validated as ints in
+  0–120 (`GFS_FORECAST_HOUR_MAX`; `ValueError` otherwise) and
+  normalized to sorted/deduped order, so each day assembles one
+  chronological time series. `field.times` carries the forecast hour:
+  the valid time is read from each GRIB message's own
+  `validityDate`/`validityTime` and cross-checked against
+  `cycle + forecast_hour` (a served step that mismatches its requested
+  hour is refused, never mislabeled). Provenance `requests` is now a
+  per-timestep list (`url`, `date`, `cycle`, `forecast_hour`,
+  `window`, per-file SHA-256, byte counts, cache hits). **Honest
+  cost:** each `(day, hour, window)` is one download — ~110 KB per
+  hourly file for a North-America box when the subregion is honored
+  (measured live 2026-10-01: 109,278 bytes, 101×261 grid), ~2.4 MB at
+  the full-globe fallback the filter silently returns when it ignores
+  the subregion; a full 121-step day is ~13 MB, ~290 MB worst-case —
+  the caller (reel pipeline, CLI) owns the frame budget. A `(day,
+  hour)` the server 404s raises `UnavailableRangeError` naming the
+  exact URL — never skipped, never padded.
+- CLI: `fetch-gfs-wind --forecast-hours 0,1,6` (comma-separated,
+  default `0`); new recorded fixture
+  `tests/fixtures/gfs_wind_20261001_f001_5x5.grib2` (real 2026-10-01
+  00z f001 NOMADS response).
+
+### Changed
+- `gfs_filter_url(day, cycle, window)` gains `forecast_hour=0`;
+  `gfs_wind._parse_grib_payload` gains `forecast_hour=0` and verifies
+  `stepRange` plus valid time.
+- `docs/DATA_SOURCES.md` section 18 and README document the hourly
+  window (f000–f120, ~10-day NOMADS retention), the per-hour file
+  size, and the caller-owned frame budget.
+
 ## [0.16.0] - 2026-10-01
 
 ### Added

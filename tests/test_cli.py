@@ -140,7 +140,8 @@ def test_fetch_gfs_wind_command_mocked(monkeypatch, tmp_path, capsys):
     import currents.gfs_wind as gw
     monkeypatch.setattr(
         gw, "fetch_gfs_wind",
-        lambda bbox, start, end, stride_days=1, cycle="00", work_dir=None:
+        lambda bbox, start, end, stride_days=1, cycle="00",
+        forecast_hours=(0,), work_dir=None:
         gw.GfsWindField.synthetic(nt=2, cycle=cycle))
     ns = type("NS", (), {"bbox": "-130,25,-65,50", "start": "2026-09-28",
                          "end": "2026-09-29", "stride_days": 1,

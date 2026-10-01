@@ -1,17 +1,18 @@
 """NOAA GFS 10-m winds + 2-m air temperature via the NOMADS GRIB filter.
 
-:func:`fetch_gfs_wind` pulls the **f000 analysis snapshot** (``00``/``06``/
-``12``/``18`` UTC cycles) of the 0.25-degree Global Forecast System from
-NCEP's NOMADS server — completely **keyless** (plain HTTPS, no account,
-no token), which is what makes it usable from unattended automation
-where credentialed sources (OSCAR, CMEMS, ERA5/CDS, FIRMS) cannot run.
+:func:`fetch_gfs_wind` pulls 10-m wind and 2-m temperature fields from
+the 0.25-degree Global Forecast System (``00``/``06``/``12``/``18`` UTC
+cycles) via NCEP's NOMADS server — completely **keyless** (plain HTTPS,
+no account, no token), which is what makes it usable from unattended
+automation where credentialed sources (OSCAR, CMEMS, ERA5/CDS, FIRMS)
+cannot run.
 
 The request goes through the GRIB filter CGI
 (``filter_gfs_0p25.pl``)::
 
     https://nomads.ncep.noaa.gov/cgi-bin/filter_gfs_0p25.pl
         ?dir=/gfs.YYYYMMDD/HH/atmos
-        &file=gfs.t{HH}z.pgrb2.0p25.f000
+        &file=gfs.t{HH}z.pgrb2.0p25.f{HHH}
         &subregion=on
         &leftlon=..&rightlon=..&toplat=..&bottomlat=..
         &lev_10_m_above_ground=on&var_UGRD=on&var_VGRD=on
@@ -28,11 +29,20 @@ requested bbox — defense in depth against the filter's quirks.
     scn25-81). The GRIB filter CGI above is the working keyless path;
     do not "upgrade" this module to an OpenDAP URL.
 
-Fetched fields (one f000 snapshot per sampled day):
+Fetched fields (one snapshot per ``(day, forecast_hour)`` step):
 
 * ``"u10"`` / ``"v10"`` — 10-m wind components, m/s (``10u``/``10v`` on
   the wire)
 * ``"t2m"`` — 2-m air temperature, **°C here** (Kelvin on the wire)
+
+``forecast_hours=(0,)`` is the f000 **analysis** snapshot per sampled
+day. The GFS 0.25° is hourly through f120, so e.g.
+``forecast_hours=(0, 1, 6)`` assembles a sub-daily time series whose
+timestamps carry the forecast hour (``field.times`` renders ``HH:MM`` in
+viz). The valid time of each step is taken from the GRIB message's own
+``validityDate``/``validityTime`` and cross-checked against
+``cycle + forecast_hour`` — a served step that does not match its
+requested hour is refused, never mislabeled.
 
 :class:`GfsWindField` matches the :class:`Era5Field` shape
 (``grids``/``times``/``lats``/``lons`` plus ``values``/``overlay_grids``)
@@ -51,8 +61,15 @@ the ocean-current shape does not satisfy (documented choice).
   :class:`UnavailableRangeError` — never silent, never padded.
 * A cycle that has not posted yet (e.g. today's ``18`` at 09:00 UTC)
   returns HTTP 404 from NOMADS, which surfaces as
-  :class:`UnavailableRangeError` naming the exact URL.
-* f000 is the **analysis**, not a forecast; ``stride_days >= 1`` only.
+  :class:`UnavailableRangeError` naming the exact URL. The same
+  applies per forecast hour: a missing ``(day, hour)`` is never
+  skipped or padded.
+* f000 is the **analysis**, f001..f120 are hourly **forecasts**;
+  ``stride_days >= 1`` only (days, not hours, are the coarse axis).
+* **Download cost is honest and per-step**: each ``(day, hour,
+  window)`` is one ~2.4 MB GRIB for a North-America box. A full
+  ``forecast_hours=tuple(range(121))`` day is ~290 MB — the caller
+  (reel pipeline, CLI) owns the frame budget, not this adapter.
 
 ``cfgrib`` is a lazy import — the module imports cleanly without it,
 and :func:`fetch_gfs_wind` raises an actionable ``ImportError``
@@ -88,10 +105,14 @@ DateLike = Union[_dt.date, _dt.datetime, str]
 NOMADS_FILTER_BASE = "https://nomads.ncep.noaa.gov/cgi-bin/filter_gfs_0p25.pl"
 #: GFS analysis cycles served under /gfs.YYYYMMDD/HH/atmos.
 GFS_CYCLES = ("00", "06", "12", "18")
-#: Forecast hour requested: f000 = the analysis. Fixed — a daily reel of
-#: analyses is what the wind-strand use case needs; other forecast hours
-#: are a different product with different semantics.
+#: Forecast hour requested: f000 = the analysis. The default — a daily
+#: reel of analyses is what the wind-strand use case needs. Pass other
+#: hours via ``fetch_gfs_wind(..., forecast_hours=(0, 1, 6))``.
 GFS_FORECAST_HOUR = "000"
+#: Highest forecast hour served hourly by the GFS 0.25° (f000..f120).
+#: Verified live 2026-10-01: f001 and f006 both returned HTTP 200 through
+#: the same GRIB filter path.
+GFS_FORECAST_HOUR_MAX = 120
 #: Native grid spacing, degrees.
 GFS_RES = 0.25
 #: NOMADS retention of the 0.25° GFS, in days including today.
@@ -407,6 +428,42 @@ def gfs_lon_windows(bbox: Sequence[float]
     return [(minx, miny, maxx, maxy)]
 
 
+def _validate_forecast_hours(
+        forecast_hours: Sequence[int]) -> Tuple[int, ...]:
+    """Validate ``forecast_hours`` and normalize to sorted, deduped ints.
+
+    GFS 0.25° is hourly f000..f120 (:data:`GFS_FORECAST_HOUR_MAX`).
+    Raises ``ValueError`` for non-ints (bools included), empties, or
+    hours outside 0..120. Returns the hours sorted ascending and
+    deduplicated, so every fetch assembles its per-day time series in
+    chronological order regardless of the order the caller passed.
+    """
+    if isinstance(forecast_hours, bool):
+        raise ValueError(
+            f"forecast_hours must be a sequence of ints 0.."
+            f"{GFS_FORECAST_HOUR_MAX}, got {forecast_hours!r}")
+    try:
+        hours = tuple(forecast_hours)
+    except TypeError:
+        raise ValueError(
+            f"forecast_hours must be a sequence of ints 0.."
+            f"{GFS_FORECAST_HOUR_MAX}, got {forecast_hours!r}") from None
+    if not hours:
+        raise ValueError(
+            f"forecast_hours must be a non-empty sequence of ints 0.."
+            f"{GFS_FORECAST_HOUR_MAX}")
+    for h in hours:
+        if isinstance(h, bool) or not isinstance(h, int):
+            raise ValueError(
+                f"forecast_hours must be ints 0..{GFS_FORECAST_HOUR_MAX}, "
+                f"got {h!r}")
+        if not 0 <= h <= GFS_FORECAST_HOUR_MAX:
+            raise ValueError(
+                f"forecast hour {h} is outside 0..{GFS_FORECAST_HOUR_MAX} "
+                "(GFS 0.25° is hourly f000..f120)")
+    return tuple(sorted(set(hours)))
+
+
 def _validate_gfs_cycle(cycle: str) -> str:
     c = str(cycle).strip()
     if c not in GFS_CYCLES:
@@ -460,21 +517,27 @@ def gfs_sample_plan(d0: _dt.datetime, d1: _dt.datetime,
 
 
 def gfs_filter_url(day: _dt.date, cycle: str,
-                   window: Sequence[float]) -> str:
-    """Build the NOMADS GRIB-filter URL for one GFS f000 analysis.
+                   window: Sequence[float],
+                   forecast_hour: int = 0) -> str:
+    """Build the NOMADS GRIB-filter URL for one GFS forecast step.
 
     ``window`` is ``(min_lon, min_lat, max_lon, max_lat)`` in -180..180
     (ascending — antimeridian windows are split by
     :func:`gfs_lon_windows` before this is called). ``subregion=on`` is
     what makes the filter honor the box; the adapter still verifies and
-    crops locally after the read.
+    crops locally after the read. ``forecast_hour`` selects the file
+    ``gfs.t{HH}z.pgrb2.0p25.f{HHH}`` (f000 = analysis, f001..f120 =
+    hourly forecasts); it defaults to ``0`` so existing callers keep
+    getting the analysis URL.
     """
     minx, miny, maxx, maxy = (float(x) for x in window)
     c = _validate_gfs_cycle(cycle)
+    hours = _validate_forecast_hours((forecast_hour,))
+    fff = f"{hours[0]:03d}"
     datestr = day.strftime("%Y%m%d")
     params = (
         f"dir=/gfs.{datestr}/{c}/atmos"
-        f"&file=gfs.t{c}z.pgrb2.0p25.f{GFS_FORECAST_HOUR}"
+        f"&file=gfs.t{c}z.pgrb2.0p25.f{fff}"
         "&subregion=on"
         f"&leftlon={minx}&rightlon={maxx}&toplat={maxy}&bottomlat={miny}"
         "&lev_10_m_above_ground=on&var_UGRD=on&var_VGRD=on"
@@ -587,7 +650,7 @@ def _require_cfgrib():
 
 
 def _parse_grib_payload(payload: bytes, url: str, day: _dt.date,
-                        cycle: str
+                        cycle: str, forecast_hour: int = 0
                         ) -> Dict[str, Dict[str, Any]]:
     """Parse one NOMADS GRIB-filter payload into per-variable grids.
 
@@ -596,11 +659,19 @@ def _parse_grib_payload(payload: bytes, url: str, day: _dt.date,
     builder) and returns, per canonical grid key (``"u10"``, ``"v10"``,
     ``"t2m"``), ``{"values": (Ny, Nx) float array, "lats": (Ny,),
     "lons": (Nx,) (degrees east, -180..180, increasing), "data_date": str,
-    "data_time": str}``.
+    "data_time": str, "valid_time": str}``.
 
-    Raises :class:`RuntimeError` when a requested variable is missing or
-    the message's data date/cycle does not match the request (the filter
-    must never silently serve the wrong day).
+    ``forecast_hour`` is the requested file step (f000 = analysis,
+    f001..f120 = hourly forecasts). Each message's ``stepRange`` must
+    equal it, and the message's ``validityDate``/``validityTime`` must
+    equal ``cycle + forecast_hour`` — the valid time is what lands on
+    the field's ``times`` axis, so a served step that does not match
+    its requested hour is refused rather than mislabeled.
+
+    Raises :class:`RuntimeError` when a requested variable is missing,
+    when a message's data date/cycle or forecast step does not match
+    the request (the filter must never silently serve the wrong day or
+    the wrong hour).
     """
     FileStream = _require_cfgrib()
     with tempfile.NamedTemporaryFile(suffix=".grib2", delete=False) as tmp:
@@ -620,6 +691,9 @@ def _parse_grib_payload(payload: bytes, url: str, day: _dt.date,
         raise RuntimeError(
             f"NOMADS payload for {url} contained no GRIB messages.")
     want = {short: spec["grid"] for short, spec in GFS_GRIDS.items()}
+    cycle_dt = _dt.datetime(day.year, day.month, day.day,
+                            int(cycle), tzinfo=_dt.timezone.utc)
+    expected_valid = cycle_dt + _dt.timedelta(hours=forecast_hour)
     found: Dict[str, Dict[str, Any]] = {}
     for _offset, m in messages:
         short = m.get("shortName")
@@ -637,6 +711,25 @@ def _parse_grib_payload(payload: bytes, url: str, day: _dt.date,
                 f"NOMADS served the wrong day/cycle for {url}: message "
                 f"dataDate={data_date} dataTime={data_time}, requested "
                 f"{day.strftime('%Y%m%d')}/{cycle}. Refusing to mislabel.")
+        step = str(m.get("stepRange"))
+        if step != str(forecast_hour):
+            raise RuntimeError(
+                f"NOMADS served the wrong forecast step for {url}: message "
+                f"stepRange={step!r}, requested f{forecast_hour:03d}. "
+                "Refusing to mislabel.")
+        # The valid time is authoritative from the payload itself; it
+        # must agree with cycle + forecast_hour (it crosses midnight
+        # for e.g. 18z f006 — that is expected, not an error).
+        validity = _dt.datetime.strptime(
+            f"{int(m.get('validityDate')):08d}"
+            f"{int(m.get('validityTime')):04d}",
+            "%Y%m%d%H%M").replace(tzinfo=_dt.timezone.utc)
+        if validity != expected_valid:
+            raise RuntimeError(
+                f"NOMADS payload for {url} carries valid time "
+                f"{validity.isoformat()} but cycle {cycle}z + "
+                f"f{forecast_hour:03d} is {expected_valid.isoformat()}. "
+                "Refusing to mislabel.")
         ny, nx = int(m["Ny"]), int(m["Nx"])
         vals = np.asarray(m["values"], dtype=float).reshape(ny, nx)
         lat0 = float(m["latitudeOfFirstGridPointInDegrees"])
@@ -654,7 +747,8 @@ def _parse_grib_payload(payload: bytes, url: str, day: _dt.date,
             lats = lats[::-1]
             vals = vals[::-1, :]
         found[key] = {"values": vals, "lats": lats, "lons": lons,
-                      "data_date": data_date, "data_time": data_time}
+                      "data_date": data_date, "data_time": data_time,
+                      "valid_time": validity.isoformat()}
     missing = [k for k in ("u10", "v10", "t2m") if k not in found]
     if missing:
         raise RuntimeError(
@@ -726,11 +820,12 @@ def fetch_gfs_wind(bbox: Sequence[float],
                    start: DateLike, end: DateLike,
                    stride_days: int = 1,
                    cycle: str = "00",
+                   forecast_hours: Sequence[int] = (0,),
                    work_dir: Optional[str] = None) -> GfsWindField:
     """Fetch NOAA GFS 10-m winds + 2-m air temperature (keyless, NOMADS).
 
-    One f000 **analysis** snapshot per sampled day, from the 0.25° GFS
-    via the NOMADS GRIB filter — no account, no API key.
+    One snapshot per ``(sampled day, forecast hour)`` step, from the
+    0.25° GFS via the NOMADS GRIB filter — no account, no API key.
 
     Args:
         bbox: ``(min_lon, min_lat, max_lon, max_lat)`` in -180..180
@@ -741,19 +836,32 @@ def fetch_gfs_wind(bbox: Sequence[float],
         stride_days: day sampling stride, int >= 1 (default 1 = every day).
         cycle: GFS analysis cycle — ``"00"``, ``"06"``, ``"12"`` or
             ``"18"`` (default ``"00"``).
+        forecast_hours: tuple/list of forecast hours to fetch per
+            sampled day, ints 0..120 (default ``(0,)`` = the f000
+            analysis only — backwards compatible). ``(0, 1, 6)`` gives
+            a sub-daily series; hours are normalized to sorted order so
+            the time series is chronological. Each hour costs one
+            ~2.4 MB download per window for a North-America box, so
+            ``range(121)`` is ~290 MB/day — the caller owns the frame
+            budget.
         work_dir: cache directory for the downloaded GRIB payloads
             (default ``$SURVEY_CURRENTS_CACHE/gfs-wind``).
 
     Returns:
         :class:`GfsWindField` with ``u10``/``v10`` in m/s and ``t2m``
-        in °C, plus provenance (exact request URLs, per-file SHA-256,
-        byte counts, retrieval time).
+        in °C, one timestep per ``(day, forecast_hour)`` in
+        chronological order; ``times`` carry the forecast hour (valid
+        time from the GRIB message itself). Provenance records a
+        per-timestep list: exact request URLs, per-file SHA-256, byte
+        counts, retrieval time.
 
     Raises:
         ImportError: ``cfgrib`` is not installed.
         UnavailableRangeError: a date is outside the NOMADS retention
-            window, or NOMADS returned HTTP 404 for the date/cycle.
-        ValueError: invalid bbox / stride / cycle / date order.
+            window, or NOMADS returned HTTP 404 for a (day, hour)
+            request — never a silent skip or silent padding.
+        ValueError: invalid bbox / stride / cycle / date order /
+            forecast hour.
         RuntimeError: download or GRIB parse failures.
     """
     minx, miny, maxx, maxy = validate_gfs_bbox(bbox)
@@ -761,6 +869,7 @@ def fetch_gfs_wind(bbox: Sequence[float],
     d1 = _coerce_datetime_utc(end)
     _validate_gfs_dates(d0, d1)
     c = _validate_gfs_cycle(cycle)
+    hours = _validate_forecast_hours(forecast_hours)
     if not isinstance(stride_days, int) or isinstance(stride_days, bool) \
             or stride_days < 1:
         raise ValueError(f"stride_days must be an int >= 1, got {stride_days!r}")
@@ -769,9 +878,10 @@ def fetch_gfs_wind(bbox: Sequence[float],
     windows = gfs_lon_windows((minx, miny, maxx, maxy))
     cache = gfs_cache_dir(work_dir)
 
-    day_grids: List[Dict[str, np.ndarray]] = []
-    day_lats: Optional[np.ndarray] = None
-    day_lons: Optional[np.ndarray] = None
+    step_grids: List[Dict[str, np.ndarray]] = []
+    step_times: List[str] = []
+    step_lats: Optional[np.ndarray] = None
+    step_lons: Optional[np.ndarray] = None
     requests: List[Dict[str, Any]] = []
     n_payload_bytes = 0
     combined = hashlib.sha256()
@@ -779,61 +889,71 @@ def fetch_gfs_wind(bbox: Sequence[float],
     retrieved_at = _dt.datetime.now(_dt.timezone.utc).isoformat()
 
     for day in plan:
-        win_parts: List[Tuple[np.ndarray, np.ndarray,
-                              Dict[str, np.ndarray]]] = []
-        for window in windows:
-            url = gfs_filter_url(day, c, window)
-            payload, from_cache = _cached_get_bytes(url, cache)
-            if from_cache:
-                n_cached += 1
-            n_payload_bytes += len(payload)
-            combined.update(hashlib.sha256(payload).digest())
-            requests.append({
-                "url": url,
-                "date": day.isoformat(),
-                "cycle": c,
-                "window": list(window),
-                "sha256": hashlib.sha256(payload).hexdigest(),
-                "n_bytes": len(payload),
-                "from_cache": from_cache,
-            })
-            parsed = _parse_grib_payload(payload, url, day, c)
-            _verify_coverage(parsed, window, url)
-            win_parts.append(_crop_to_window(parsed, window))
-        # Concatenate antimeridian windows along longitude (each part is
-        # already -180..180 increasing; sort + dedupe the seam meridian).
-        lats = win_parts[0][0]
-        lons = np.concatenate([p[1] for p in win_parts])
-        order = np.argsort(lons, kind="stable")
-        lons_sorted = lons[order]
-        _, unique_idx = np.unique(lons_sorted, return_index=True)
-        keep = order[np.sort(unique_idx)]
-        merged = {key: np.concatenate([p[2][key] for p in win_parts],
-                                      axis=1)[:, keep]
-                  for key in ("u10", "v10", "t2m")}
-        day_lats, day_lons = lats, lons[keep]
-        day_grids.append(merged)
+        for hour in hours:
+            win_parts: List[Tuple[np.ndarray, np.ndarray,
+                                  Dict[str, np.ndarray]]] = []
+            valid_time: Optional[str] = None
+            for window in windows:
+                url = gfs_filter_url(day, c, window, forecast_hour=hour)
+                payload, from_cache = _cached_get_bytes(url, cache)
+                if from_cache:
+                    n_cached += 1
+                n_payload_bytes += len(payload)
+                combined.update(hashlib.sha256(payload).digest())
+                requests.append({
+                    "url": url,
+                    "date": day.isoformat(),
+                    "cycle": c,
+                    "forecast_hour": hour,
+                    "window": list(window),
+                    "sha256": hashlib.sha256(payload).hexdigest(),
+                    "n_bytes": len(payload),
+                    "from_cache": from_cache,
+                })
+                parsed = _parse_grib_payload(payload, url, day, c,
+                                             forecast_hour=hour)
+                _verify_coverage(parsed, window, url)
+                if valid_time is None:
+                    valid_time = parsed["u10"]["valid_time"]
+                win_parts.append(_crop_to_window(parsed, window))
+            # Concatenate antimeridian windows along longitude (each part
+            # is already -180..180 increasing; sort + dedupe the seam
+            # meridian).
+            lats = win_parts[0][0]
+            lons = np.concatenate([p[1] for p in win_parts])
+            order = np.argsort(lons, kind="stable")
+            lons_sorted = lons[order]
+            _, unique_idx = np.unique(lons_sorted, return_index=True)
+            keep = order[np.sort(unique_idx)]
+            merged = {key: np.concatenate([p[2][key] for p in win_parts],
+                                          axis=1)[:, keep]
+                      for key in ("u10", "v10", "t2m")}
+            step_lats, step_lons = lats, lons[keep]
+            step_grids.append(merged)
+            assert valid_time is not None  # parser records it on every part
+            step_times.append(valid_time)
 
-    nt = len(plan)
-    lats = np.asarray(day_lats, dtype=float)
-    lons = np.asarray(day_lons, dtype=float)
+    nt = len(step_times)
+    lats = np.asarray(step_lats, dtype=float)
+    lons = np.asarray(step_lons, dtype=float)
     grids = {
-        "u10": np.ma.array(np.stack([g["u10"] for g in day_grids]),
+        "u10": np.ma.array(np.stack([g["u10"] for g in step_grids]),
                            mask=False),
-        "v10": np.ma.array(np.stack([g["v10"] for g in day_grids]),
+        "v10": np.ma.array(np.stack([g["v10"] for g in step_grids]),
                            mask=False),
         # 2t is Kelvin on the wire -> °C here.
-        "t2m": np.ma.array(np.stack([g["t2m"] for g in day_grids])
+        "t2m": np.ma.array(np.stack([g["t2m"] for g in step_grids])
                            - _KELVIN_OFFSET, mask=False),
     }
-    times = [f"{day.isoformat()}T{c}:00:00+00:00" for day in plan]
+    times = step_times
 
     return GfsWindField(
         grids=grids, times=times, lats=lats, lons=lons, cycle=c,
         source="noaa-nomads/gfs-0p25",
         provenance={
-            "dataset": "NOAA GFS 0.25-degree analysis (f000) via the "
-                       "NCEP NOMADS GRIB filter (keyless HTTPS)",
+            "dataset": "NOAA GFS 0.25-degree analyses + hourly forecast "
+                       "steps (f000..f120) via the NCEP NOMADS GRIB filter "
+                       "(keyless HTTPS)",
             "nomads_filter": NOMADS_FILTER_BASE,
             "requests": requests,
             "n_requests": len(requests),
@@ -845,7 +965,12 @@ def fetch_gfs_wind(bbox: Sequence[float],
             "lon_windows": [list(w) for w in windows],
             "time_requested": [d0.date().isoformat(), d1.date().isoformat()],
             "cycle": c,
-            "forecast_hour": f"f{GFS_FORECAST_HOUR} (analysis)",
+            "forecast_hours": list(hours),
+            "forecast_hours_note": (
+                "f000 = analysis; f001..f120 = hourly forecast steps. "
+                "Each step is one NOMADS GRIB-filter request (~2.4 MB "
+                "for a North-America box at 0.25°); a full 120-step day "
+                "is ~290 MB — the caller owns the frame budget."),
             "stride_days": stride_days,
             "retention_days": GFS_RETENTION_DAYS,
             "retention_note": (
@@ -864,7 +989,8 @@ def fetch_gfs_wind(bbox: Sequence[float],
                 "air_temperature": "2-m air temperature in degF "
                                    "(warming.watch strand-color convention)",
             },
-            "grid": f"{GFS_RES}-degree global (f000 analysis snapshots)",
+            "grid": f"{GFS_RES}-degree global (per-step analysis/forecast "
+                     "snapshots)",
             "access": "keyless",
         },
     )
@@ -889,6 +1015,7 @@ __all__ = [
     "GfsWindField",
     "GFS_CYCLES",
     "GFS_FORECAST_HOUR",
+    "GFS_FORECAST_HOUR_MAX",
     "GFS_GRIDS",
     "GFS_RES",
     "GFS_RETENTION_DAYS",

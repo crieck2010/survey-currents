@@ -403,6 +403,36 @@ def cmd_usgs_synthetic(a: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_fetch_gfs_wind(a: argparse.Namespace) -> int:
+    from .gfs_wind import fetch_gfs_wind
+    field = fetch_gfs_wind(_parse_bbox(a.bbox), a.start, a.end,
+                           stride_days=a.stride_days, cycle=a.cycle,
+                           work_dir=a.work_dir or None)
+    path = f"{a.out.rstrip('/')}.json"
+    field.to_json(path)
+    print(f"fetched GFS 10-m wind field ({len(field.times)} daily f{field.cycle}z "
+          f"analyses, cycle={field.cycle}) -> {path}")
+    print(f"source={field.source} bounds={field.bounds}")
+    print(f"mean wind speed (t0)={field.spatial_mean('wind', 0):.2f} m/s "
+          f"mean 2m air temp (t0)={field.spatial_mean('air_temperature', 0):.1f} F")
+    prov = field.provenance
+    print(f"requests={prov.get('n_requests', '?')} "
+          f"cached={prov.get('n_cached', '?')} "
+          f"bytes={prov.get('n_bytes', '?')} sha256={prov.get('sha256', '?')}")
+    return 0
+
+
+def cmd_gfs_wind_synthetic(a: argparse.Namespace) -> int:
+    from .gfs_wind import GfsWindField
+    field = GfsWindField.synthetic(nt=a.nt, seed=a.seed, cycle=a.cycle,
+                                   source=a.source)
+    path = f"{a.out.rstrip('/')}.json"
+    field.to_json(path)
+    print(f"wrote synthetic GFS wind field ({len(field.times)} steps, "
+          f"cycle={field.cycle}) -> {path}")
+    return 0
+
+
 def cmd_fetch_earthquakes(a: argparse.Namespace) -> int:
     from .earthquakes import fetch_earthquakes
     field = fetch_earthquakes(_parse_bbox(a.bbox), a.start, a.end,
@@ -866,6 +896,33 @@ def build_parser() -> argparse.ArgumentParser:
                    help="source label recorded on the field")
     s.add_argument("--out", default="quakes_synthetic", help="output path prefix")
     s.set_defaults(func=cmd_earthquakes_synthetic)
+
+    s = sub.add_parser("fetch-gfs-wind",
+                       help="fetch NOAA GFS 10-m winds + 2-m air temperature "
+                            "(needs network; keyless NOMADS GRIB filter; "
+                            "cached)")
+    s.add_argument("--bbox", required=True, help="min_lon,min_lat,max_lon,max_lat")
+    s.add_argument("--start", required=True, help="start date YYYY-MM-DD")
+    s.add_argument("--end", required=True, help="end date YYYY-MM-DD")
+    s.add_argument("--stride-days", type=int, default=1,
+                   help="day sampling stride, >= 1 (default: 1)")
+    s.add_argument("--cycle", default="00",
+                   help="GFS analysis cycle: 00/06/12/18 (default: 00)")
+    s.add_argument("--work-dir", default="",
+                   help="GRIB cache dir (default: $SURVEY_CURRENTS_CACHE/gfs-wind)")
+    s.add_argument("--out", default="gfs_wind", help="output path prefix")
+    s.set_defaults(func=cmd_fetch_gfs_wind)
+
+    s = sub.add_parser("gfs-wind-synthetic",
+                       help="write a deterministic synthetic GFS wind field (offline)")
+    s.add_argument("--nt", type=int, default=4)
+    s.add_argument("--seed", type=int, default=11)
+    s.add_argument("--cycle", default="00",
+                   help="GFS analysis cycle label (default: 00)")
+    s.add_argument("--source", default="synthetic",
+                   help="source label recorded on the field")
+    s.add_argument("--out", default="gfs_wind_synthetic", help="output path prefix")
+    s.set_defaults(func=cmd_gfs_wind_synthetic)
 
     s = sub.add_parser("sst-synthetic",
                        help="write a deterministic synthetic global SST field (offline)")

@@ -2,7 +2,7 @@
 
 Surface-current and water-temperature acquisition engine for surveying and remote sensing — the first module of the earthwatch-suite **flow-field animation program** (the pipeline that produces mapped.earth-style animated current/temperature reels).
 
-`survey-currents` pulls hourly current-vector (u/v) and water-temperature fields from **operational hydrodynamic forecast models** — not satellites — into one canonical `CurrentField` model with provenance, COG export, and survey-suite interoperability. Since v0.2.0 it also pulls **satellite-derived daily sea-surface temperature** from NOAA's GLSEA analysis (Great Lakes only) into a companion `GlseaField` model, plus lake-wide average temperature series. Since v0.3.0 it pulls **global satellite SST** from two more sources into a companion `SstField` model: NOAA OISST v2.1 (keyless, 0.25°, 1981–present) and NASA JPL MUR v4.1 (free Earthdata Login, ~1 km, 2002–present). Since v0.4.0 it pulls **global atmospheric reanalysis** (Copernicus ERA5: wind, pressure, air temperature, precipitation) into a companion `Era5Field` model. Since v0.5.0 it pulls **global surface currents** — NASA PODAAC OSCAR v2.0 (daily, 1993–present, free Earthdata Login) and the CMEMS `global-physics-daily` preset (1/12°, free CMEMS account) — into the canonical `CurrentField` model. Since v0.7.0 it pulls **passive-microwave sea-ice concentration** from the NOAA/NSIDC Sea Ice Index (G02135 v4.0, keyless, 1978–present) into a companion `IceField` model. Since v0.8.0 it pulls **satellite-observed precipitation** from NASA GPM IMERG V07 (half-hourly, 0.1°, 2000–present, free Earthdata Login, Early/Late/Final latency tiers) into a companion `RainField` model.
+`survey-currents` pulls hourly current-vector (u/v) and water-temperature fields from **operational hydrodynamic forecast models** — not satellites — into one canonical `CurrentField` model with provenance, COG export, and survey-suite interoperability. Since v0.2.0 it also pulls **satellite-derived daily sea-surface temperature** from NOAA's GLSEA analysis (Great Lakes only) into a companion `GlseaField` model, plus lake-wide average temperature series. Since v0.3.0 it pulls **global satellite SST** from two more sources into a companion `SstField` model: NOAA OISST v2.1 (keyless, 0.25°, 1981–present) and NASA JPL MUR v4.1 (free Earthdata Login, ~1 km, 2002–present). Since v0.4.0 it pulls **global atmospheric reanalysis** (Copernicus ERA5: wind, pressure, air temperature, precipitation) into a companion `Era5Field` model. Since v0.5.0 it pulls **global surface currents** — NASA PODAAC OSCAR v2.0 (daily, 1993–present, free Earthdata Login) and the CMEMS `global-physics-daily` preset (1/12°, free CMEMS account) — into the canonical `CurrentField` model. Since v0.7.0 it pulls **passive-microwave sea-ice concentration** from the NOAA/NSIDC Sea Ice Index (G02135 v4.0, keyless, 1978–present) into a companion `IceField` model. Since v0.8.0 it pulls **satellite-observed precipitation** from NASA GPM IMERG V07 (half-hourly, 0.1°, 2000–present, free Earthdata Login, Early/Late/Final latency tiers) into a companion `RainField` model. Since v0.16.0 it pulls **NOAA GFS 10-m winds and 2-m air temperature** from the keyless NOMADS GRIB filter (daily f000 analysis snapshots, last ~10 days) into a companion `GfsWindField` model — the keyless wind source for unattended automation.
 
 ## Data sources
 
@@ -15,6 +15,7 @@ Surface-current and water-temperature acquisition engine for surveying and remot
 | NOAA OISST v2.1 via CoastWatch ERDDAP (`ncdcOisst21Agg`) | No signup | **Global ocean** | 0.25° (~28 km) | daily analysis, 1981–present |
 | NASA JPL MUR v4.1 via Earthdata OPeNDAP | Free Earthdata Login | **Global ocean** | ~0.01° (~1 km) | daily analysis, 2002–present |
 | Copernicus ERA5 via CDS API (`reanalysis-era5-single-levels`) | Free CDS account | **Global atmosphere** | 0.25° (~28 km) | hourly reanalysis, 1940–present |
+| NOAA GFS 0.25° via NOMADS GRIB filter (`filter_gfs_0p25.pl`) | No signup | **Global atmosphere (analysis)** | 0.25° (~28 km) | daily f000 analysis snapshots, last ~10 days |
 | NASA PODAAC OSCAR v2.0 via Earthdata OPeNDAP | Free Earthdata Login | **Global ocean currents** | 0.25° (~28 km) | daily averages, 1993–present |
 | CMEMS global ocean physics (`global-physics-daily` preset) | Free CMEMS account | **Global ocean currents** | 1/12° (~9 km) | daily analysis+forecast |
 | NASA GPM IMERG V07 via GES DISC HTTPS | Free Earthdata Login | **Global precipitation** | 0.1° (~10 km) | half-hourly, 2000–present (Early/Late/Final runs) |
@@ -253,6 +254,15 @@ USGS earthquake catalog (ComCat) converges on `QuakeField` (`src/currents/earthq
 - **Honesty contract:** ComCat is a catalog of *observed* events — never describe it as an earthquake forecast or hazard model; magnitude completeness varies by region and time (~M4.5+ globally since ~1973, ~M2.5+ in the contiguous US since ~2013); record floor 1900-01-01
 - CLI: `fetch-earthquakes`, `earthquakes-synthetic`
 
+NOAA GFS 10-m winds converge on `GfsWindField` (`src/currents/gfs_wind.py`):
+
+- `fetch_gfs_wind(bbox, start, end, stride_days=1, cycle="00", work_dir=...)` via the **keyless NOMADS GRIB filter** (`filter_gfs_0p25.pl`, plain HTTPS — no account, no token): one f000 **analysis** snapshot per sampled day (cycles 00/06/12/18 UTC); requests carry `subregion=on` (verified 2026-10-01: without it the filter silently returns the full 1440×721 global grid), and the adapter verifies the returned grid covers the bbox and crops locally with numpy; antimeridian-crossing bboxes are split into two subregion requests and concatenated
+- Grids: `u10`/`v10` 10-m wind components (m/s), `t2m` 2-m air temperature (°C — Kelvin on the wire); `GfsWindField` matches the `Era5Field` shape so survey-viz's `wind` path consumes it unchanged, and adds `air_temperature` (°F — the warming.watch strand-color convention survey-viz's `dark_strands` reads) and `temperature_unit`
+- Parsing iterates `cfgrib.messages.FileStream` (`cfgrib.open_file` fails on the mixed 10-m/2-m levels); needs `pip install 'survey-currents[gfs]'` (lazy import, module imports cleanly without it)
+- Provenance carries the exact request URLs, per-file SHA-256, byte counts, cache hits, and retrieval time; payloads cached under `$SURVEY_CURRENTS_CACHE/gfs-wind` (atomic writes, SHA-256 sidecars; analyses are immutable once posted, so entries never expire)
+- **Honesty contract:** NOMADS keeps roughly the last **10 days** of the 0.25° GFS (verified live 2026-10-01) — dates outside the window and not-yet-posted cycles raise `UnavailableRangeError`, never silent padding; f000 is the analysis, not a forecast; a served message whose data date/cycle mismatches the request is refused rather than mislabeled
+- CLI: `fetch-gfs-wind`, `gfs-wind-synthetic`
+
 ## Interoperability
 
 - **survey-monitor**: `CurrentsPassProvider` in `currents/interop.py` implements the `PassProvider` interface (`list_passes`/`metrics`) — each forecast hour becomes a monitored pass with `speed_mean`/`u_mean`/`v_mean`/`temp_mean` metrics.
@@ -276,6 +286,7 @@ src/currents/
     streamgages.py # USGS Water Services (keyless NWIS) streamgage daily values -> GageField
     oceancolor.py  # NOAA CoastWatch ERDDAP + NASA OBPG ocean color (chlorophyll-a) -> OceanColorField
     earthquakes.py # USGS ComCat FDSN event service (keyless GeoJSON) -> QuakeField
+    gfs_wind.py    # NOAA GFS 10-m winds + 2-m air temp via keyless NOMADS GRIB filter -> GfsWindField
     cmems.py       # copernicusmarine subset wrapper + parser
     convert.py     # per-timestep 4-band GeoTIFF/COG export
     provenance.py  # SHA-256 provenance sidecars

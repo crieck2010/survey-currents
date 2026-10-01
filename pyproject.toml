@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "survey-currents"
-version = "0.15.2"
-description = "Surface-current and water-temperature acquisition engine for surveying and remote sensing: NOAA Operational Forecast Systems (anonymous S3), Copernicus Marine Service, and NOAA GLSEA Great-Lakes satellite sea-surface temperature as canonical CurrentField/GlseaField models with COG export and provenance"
+version = "0.16.0"
+description = "Surface-current and water-temperature acquisition engine for surveying and remote sensing: NOAA Operational Forecast Systems (anonymous S3), Copernicus Marine Service, NOAA GLSEA Great-Lakes satellite sea-surface temperature, and NOAA GFS 10-m winds (keyless NOMADS GRIB filter) as canonical CurrentField/GlseaField/GfsWindField models with COG export and provenance"
 readme = "README.md"
 requires-python = ">=3.9"
 license = { text = "MIT" }
@@ -21,7 +21,8 @@ classifiers = [
 # The engine core is stdlib+numpy on purpose. NetCDF parsing needs
 # xarray/netCDF4; anonymous S3 download works with the stdlib (urllib) and
 # only uses boto3 when installed; CMEMS needs the copernicusmarine toolbox;
-# GeoTIFF/COG export needs rasterio; IMERG HDF5 granules need h5py.
+# GeoTIFF/COG export needs rasterio; IMERG HDF5 granules need h5py; GFS
+# GRIB2 parsing needs cfgrib (wheels bundle eccodes).
 dependencies = ["numpy>=1.22"]
 
 [project.optional-dependencies]
@@ -31,7 +32,8 @@ cmems = ["copernicusmarine>=2.0"]
 raster = ["rasterio>=1.3"]
 imerg = ["h5py>=3.8"]
 blackmarble = ["h5py>=3.8"]
-full = ["xarray>=2023.1", "netCDF4>=1.6", "boto3>=1.26", "copernicusmarine>=2.0", "rasterio>=1.3", "h5py>=3.8"]
+gfs = ["cfgrib>=0.9.10"]
+full = ["xarray>=2023.1", "netCDF4>=1.6", "boto3>=1.26", "copernicusmarine>=2.0", "rasterio>=1.3", "h5py>=3.8", "cfgrib>=0.9.10"]
 dev = ["build", "twine", "pytest"]
 
 [project.scripts]

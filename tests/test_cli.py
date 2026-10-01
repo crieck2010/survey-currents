@@ -134,3 +134,28 @@ def test_fetch_cmems_currents_command_mocked(monkeypatch, tmp_path, capsys):
     assert cli.cmd_fetch_cmems_currents(ns) == 0
     out = capsys.readouterr().out
     assert "CMEMS" in out
+
+
+def test_fetch_gfs_wind_command_mocked(monkeypatch, tmp_path, capsys):
+    import currents.gfs_wind as gw
+    monkeypatch.setattr(
+        gw, "fetch_gfs_wind",
+        lambda bbox, start, end, stride_days=1, cycle="00", work_dir=None:
+        gw.GfsWindField.synthetic(nt=2, cycle=cycle))
+    ns = type("NS", (), {"bbox": "-130,25,-65,50", "start": "2026-09-28",
+                         "end": "2026-09-29", "stride_days": 1,
+                         "cycle": "00", "work_dir": "",
+                         "out": str(tmp_path / "g")})()
+    assert cli.cmd_fetch_gfs_wind(ns) == 0
+    out = capsys.readouterr().out
+    assert "GFS 10-m wind" in out
+    f = gw.GfsWindField.from_json(str(tmp_path / "g.json"))
+    assert len(f.times) == 2
+
+
+def test_gfs_wind_synthetic_command(tmp_path, capsys):
+    ns = type("NS", (), {"nt": 3, "seed": 11, "cycle": "06",
+                         "source": "synthetic",
+                         "out": str(tmp_path / "gs")})()
+    assert cli.cmd_gfs_wind_synthetic(ns) == 0
+    assert "gfs" in capsys.readouterr().out.lower()

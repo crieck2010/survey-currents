@@ -4,6 +4,54 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.16.0] - 2026-10-01
+
+### Added
+- NOAA GFS 10-m winds adapter (`src/currents/gfs_wind.py`):
+  `fetch_gfs_wind(bbox, start, end, stride_days=1, cycle="00",
+  work_dir=...)` -> `GfsWindField` via the **keyless NCEP NOMADS GRIB
+  filter** (`filter_gfs_0p25.pl`, plain HTTPS — no account, no token).
+  One f000 **analysis** snapshot per sampled day (cycles 00/06/12/18
+  UTC): `u10`/`v10` 10-m wind components (m/s) and `t2m` 2-m air
+  temperature (°C here, Kelvin on the wire). Requests carry
+  `subregion=on` — verified live 2026-10-01 that without it the filter
+  silently returns the full 1440x721 global grid (~2.4 MB) instead of
+  the requested box; the adapter verifies the returned grid covers the
+  bbox and crops locally with numpy regardless. Antimeridian-crossing
+  bboxes split into two subregion requests and concatenate along
+  longitude (seam meridian deduped). Parsing iterates
+  `cfgrib.messages.FileStream` (`cfgrib.open_file` fails on the mixed
+  10-m/2-m levels — documented in the module); lazy import with an
+  actionable error (`pip install 'survey-currents[gfs]'`, new
+  `gfs` extra, also in `full`). `GfsWindField` matches the `Era5Field`
+  shape (`grids`/`times`/`lats`/`lons`, `values` = wind speed,
+  `overlay_grids` = `{"t2m": ...}`) so survey-viz's `wind` variable
+  path consumes it unchanged, and adds `air_temperature` (°F — the
+  warming.watch strand-color convention survey-viz's `dark_strands`
+  reads) and `temperature_unit`. Provenance carries the exact request
+  URLs, per-file SHA-256, byte counts, cache hits, and retrieval time;
+  payloads cached under `$SURVEY_CURRENTS_CACHE/gfs-wind` (atomic
+  writes, SHA-256 sidecars; analyses are immutable once posted, so
+  entries never expire). **Honesty contract:** NOMADS keeps roughly
+  the last 10 days of the 0.25° GFS (`GFS_RETENTION_DAYS`, verified
+  live 2026-10-01: HTTP 200 for 2026-09-22…2026-10-01, HTTP 404 for
+  2026-09-21) — dates outside the window and not-yet-posted cycles
+  raise `UnavailableRangeError`, never silent padding; a message whose
+  data date/cycle mismatches the request is refused rather than
+  mislabeled; f000 is the analysis, not a forecast. Live-verified
+  2026-10-01 (North-America box: KB-scale per-day downloads).
+  **Design note:** a `CurrentField` was not reused — viz's wind path
+  keys off `grids["u10"]`/`grids["v10"]` with `spec.variable == "wind"`,
+  which the ocean-current shape does not satisfy (documented in
+  `docs/DATA_SOURCES.md`).
+- CLI: `fetch-gfs-wind` (real fetch), `gfs-wind-synthetic` (offline).
+- Tests: 35 new tests (`tests/test_gfs_wind.py` + CLI additions), fully
+  offline — a 614-byte recorded NOMADS fixture
+  (`tests/fixtures/gfs_wind_20261001_5x5.grib2`: real 2026-10-01 00z
+  f000 2t/10u/10v over -100…-99, 40…41) covers parsing; the HTTP layer
+  is mocked for fetch/URL/cache tests; cfgrib-dependent tests skip
+  cleanly without it.
+
 ## [0.15.2] - 2026-09-27
 
 ### Fixed

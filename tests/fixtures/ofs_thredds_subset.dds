@@ -1,0 +1,15 @@
+Dataset {
+    Float64 Depth[Depth = 37];
+    Float64 Latitude[ny = 1553][nx = 1519];
+    Float64 Longitude[ny = 1553][nx = 1519];
+    Float64 h[ny = 1553][nx = 1519];
+    Float64 mask[ny = 1553][nx = 1519];
+    Float64 time[time = 1];
+    String Times[time = 1];
+    Float32 zeta[time = 1][ny = 1553][nx = 1519];
+    Float32 zetatomllw[time = 1][ny = 1553][nx = 1519];
+    Float32 u_eastward[time = 1][Depth = 37][ny = 1553][nx = 1519];
+    Float32 v_northward[time = 1][Depth = 37][ny = 1553][nx = 1519];
+    Float32 temp[time = 1][Depth = 37][ny = 1553][nx = 1519];
+    Float32 salt[time = 1][Depth = 37][ny = 1553][nx = 1519];
+} NOAA/SSCOFS/MODELS/2026/10/01/sscofs.t15z.20261001.regulargrid.n003.nc;

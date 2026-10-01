@@ -1,0 +1,22 @@
+<?xml version='1.0' encoding='utf-8'?>
+<catalog xmlns="http://www.unidata.ucar.edu/namespaces/thredds/InvCatalog/v1.0" version="1.2">
+  <service name="seRvices" serviceType="compound" base="">
+    <service name="dapService" serviceType="OpenDAP" base="/thredds/dodsC/" />
+    <service name="httpService" serviceType="HTTPServer" base="/thredds/fileServer/" />
+    <service name="wms" serviceType="WMS" base="/thredds/wms/" />
+  </service>
+  <dataset name="2026/09/30/">
+    <property name="DatasetScan" value="true" />
+    <metadata inherited="true">
+      <serviceName>seRvices</serviceName>
+    </metadata>
+    <dataset name="sscofs.t15z.20260930.regulargrid.f000.nc" ID="NOAA/SSCOFS/MODELS/2026/09/30/sscofs.t15z.20260930.regulargrid.f000.nc" urlPath="NOAA/SSCOFS/MODELS/2026/09/30/sscofs.t15z.20260930.regulargrid.f000.nc">
+      <dataSize units="Gbytes">1.682</dataSize>
+      <date type="modified">2026-09-30T18:29:43.704Z</date>
+    </dataset>
+    <dataset name="sscofs.t09z.20260930.regulargrid.n003.nc" ID="NOAA/SSCOFS/MODELS/2026/09/30/sscofs.t09z.20260930.regulargrid.n003.nc" urlPath="NOAA/SSCOFS/MODELS/2026/09/30/sscofs.t09z.20260930.regulargrid.n003.nc">
+      <dataSize units="Gbytes">1.682</dataSize>
+      <date type="modified">2026-09-30T12:24:31.058Z</date>
+    </dataset>
+    </dataset>
+</catalog>

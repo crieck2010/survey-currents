@@ -4,6 +4,51 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.18.0] - 2026-10-01
+
+### Added
+- NOAA OFS surface currents via **keyless CO-OPS THREDDS OPeNDAP subsetting**
+  (`src/currents/ofs_thredds.py`):
+  `fetch_ofs_thredds(ofs_code, bbox, start, end, cadence_hours=6,
+  prefer="nowcast", timeout=120.0)` -> `CurrentField` (`u`/`v` in m/s,
+  `temperature` in °C, `source="ofs-thredds/<CODE>"`). The direct S3
+  full-file OFS path is dead for reel work (hourly field files are
+  62–70 MB each); the same models' `regulargrid` NetCDFs on the CO-OPS
+  THREDDS server subset server-side through DAP2 constraint expressions
+  on `/thredds/dodsC/`, parsed with a DDS-driven XDR decoder (stdlib
+  `struct` + numpy — the server reorders coordinate variables first, so
+  the parser follows the response DDS, never the request order). Grid
+  vectors come from tiny `.ascii` probes with a regularity guard (a
+  non-regular grid raises `ValueError`); land cells (`_FillValue`) are
+  NaN; `Depth[0]` = 0.0 m surface (verified live 2026-10-01).
+  **12 of 15 OFS models verified live 2026-10-01** with the
+  `u_eastward`/`v_northward`/`temp` schema: SSCOFS, CBOFS, WCOFS, NGOFS2,
+  GOMOFS, DBOFS, SFBOFS, LEOFS, LMHOFS, LOOFS, LSOFS, CIOFS (NYOFS/SJROFS
+  have no `regulargrid` files; TBOFS is stale). Filename→valid-time rules
+  verified live across 7 models (forecast `f{HHH}` = cycle+HHH; nowcast
+  `n{HHH}` = cycle−span+HHH with the per-model span calibrated by probing
+  one nowcast file's own `time`: 6 h for most models, 24 h for WCOFS);
+  every served step's valid time is cross-checked against the requested
+  hour and refused on mismatch — never mislabeled. **Honest cost:**
+  measured live 2026-10-01, a Puget Sound bbox (240×201 grid) is
+  **579,229 bytes per hourly step** vs ~65 MB for the full field file
+  (~120× smaller) — the caller owns the frame budget. **Honest limits:**
+  THREDDS keeps roughly the last **31 days** of OFS output; a date with
+  no day catalog or an hour with no matching file raises
+  `UnavailableRangeError` naming the exact URL — never silent, never
+  padded. Per-step provenance records the exact OPeNDAP URLs, valid
+  times, kind/hour/cycle, byte counts, and `water_fraction`.
+- CLI: `fetch-ofs-thredds --ofs SSCOFS --bbox … --start … --end …
+  [--cadence-hours 6] [--prefer nowcast] [--out …]` (writes field JSON).
+- Tests: 29 offline tests (`tests/test_ofs_thredds.py`) against recorded
+  real fixtures (day catalogs, DAS/DDS, grid-vector and 3×4 subset
+  `.dods`/`.ascii` pairs, time probes — all recorded live 2026-10-01;
+  the binary parser is cross-validated against the ASCII form of the
+  same subset). No live network in the suite.
+- `docs/DATA_SOURCES.md` section 19 and README document the THREDDS
+  endpoint, the 12-model coverage table, filename conventions, per-step
+  size, and the caller-owned frame budget.
+
 ## [0.17.0] - 2026-10-01
 
 ### Added

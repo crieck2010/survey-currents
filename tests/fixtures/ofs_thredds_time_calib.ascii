@@ -1,0 +1,7 @@
+Dataset {
+    Float64 time[time = 1];
+} NOAA/SSCOFS/MODELS/2026/09/30/sscofs.t09z.20260930.regulargrid.n003.nc;
+---------------------------------------------
+time[1]
+2.759832E8
+

@@ -1,0 +1,34 @@
+<?xml version='1.0' encoding='utf-8'?>
+<catalog xmlns="http://www.unidata.ucar.edu/namespaces/thredds/InvCatalog/v1.0" version="1.2">
+  <service name="seRvices" serviceType="compound" base="">
+    <service name="dapService" serviceType="OpenDAP" base="/thredds/dodsC/" />
+    <service name="httpService" serviceType="HTTPServer" base="/thredds/fileServer/" />
+    <service name="wms" serviceType="WMS" base="/thredds/wms/" />
+  </service>
+  <dataset name="2026/10/01/">
+    <property name="DatasetScan" value="true" />
+    <metadata inherited="true">
+      <serviceName>seRvices</serviceName>
+    </metadata>
+    <dataset name="sscofs.t15z.20261001.regulargrid.n006.nc" ID="NOAA/SSCOFS/MODELS/2026/10/01/sscofs.t15z.20261001.regulargrid.n006.nc" urlPath="NOAA/SSCOFS/MODELS/2026/10/01/sscofs.t15z.20261001.regulargrid.n006.nc">
+      <dataSize units="Gbytes">1.682</dataSize>
+      <date type="modified">2026-10-01T18:29:13.963Z</date>
+    </dataset>
+    <dataset name="sscofs.t15z.20261001.regulargrid.n003.nc" ID="NOAA/SSCOFS/MODELS/2026/10/01/sscofs.t15z.20261001.regulargrid.n003.nc" urlPath="NOAA/SSCOFS/MODELS/2026/10/01/sscofs.t15z.20261001.regulargrid.n003.nc">
+      <dataSize units="Gbytes">1.682</dataSize>
+      <date type="modified">2026-10-01T18:28:59.636Z</date>
+    </dataset>
+    <dataset name="sscofs.t15z.20261001.regulargrid.f003.nc" ID="NOAA/SSCOFS/MODELS/2026/10/01/sscofs.t15z.20261001.regulargrid.f003.nc" urlPath="NOAA/SSCOFS/MODELS/2026/10/01/sscofs.t15z.20261001.regulargrid.f003.nc">
+      <dataSize units="Gbytes">1.682</dataSize>
+      <date type="modified">2026-10-01T18:29:34.788Z</date>
+    </dataset>
+    <dataset name="sscofs.t09z.20261001.regulargrid.n006.nc" ID="NOAA/SSCOFS/MODELS/2026/10/01/sscofs.t09z.20261001.regulargrid.n006.nc" urlPath="NOAA/SSCOFS/MODELS/2026/10/01/sscofs.t09z.20261001.regulargrid.n006.nc">
+      <dataSize units="Gbytes">1.682</dataSize>
+      <date type="modified">2026-10-01T12:29:07.526Z</date>
+    </dataset>
+    <dataset name="sscofs.t09z.20261001.regulargrid.n003.nc" ID="NOAA/SSCOFS/MODELS/2026/10/01/sscofs.t09z.20261001.regulargrid.n003.nc" urlPath="NOAA/SSCOFS/MODELS/2026/10/01/sscofs.t09z.20261001.regulargrid.n003.nc">
+      <dataSize units="Gbytes">1.682</dataSize>
+      <date type="modified">2026-10-01T12:28:52.162Z</date>
+    </dataset>
+    </dataset>
+</catalog>

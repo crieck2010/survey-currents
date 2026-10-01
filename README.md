@@ -9,6 +9,7 @@ Surface-current and water-temperature acquisition engine for surveying and remot
 | Source | Access | Coverage | Resolution | Horizon |
 |---|---|---|---|---|
 | NOAA OFS via anonymous AWS S3 (`noaa-ofs-pds`, `noaa-nos-ofs-pds`) | No signup, unsigned requests | US coasts + Great Lakes | 50 m – 5 km | 48–120 h |
+| NOAA OFS via CO-OPS THREDDS OPeNDAP (`opendap.co-ops.nos.noaa.gov/thredds`) | No signup | **US coasts + Great Lakes (12 models: SSCOFS, CBOFS, WCOFS, NGOFS2, …)** | 50 m – 5 km | hourly steps, last ~31 days |
 | Copernicus Marine Service (`copernicusmarine` toolbox) | Free account | Global ocean | 1/12° (~9 km) | NRT + forecast |
 | NOAA GLSEA via ERDDAP griddap (`GLSEA_ACSPO_GCS`) | No signup | **Great Lakes only** | ~1.5 km | daily analysis, 2006–present |
 | NOAA GLSEA via ERDDAP tabledap (`glsea_avgtemps_3`) | No signup | Great Lakes (per-lake daily averages) | lake-wide | daily, 2006–present |
@@ -263,6 +264,13 @@ NOAA GFS 10-m winds converge on `GfsWindField` (`src/currents/gfs_wind.py`):
 - **Honesty contract:** NOMADS keeps roughly the last **10 days** of the 0.25° GFS (verified live 2026-10-01) — dates outside the window and not-yet-posted cycles raise `UnavailableRangeError`, never silent padding; a missing `(day, hour)` raises naming the exact URL, never skipped or padded; f000 is the analysis, f001–f120 are hourly forecasts; a served message whose data date/cycle or forecast step mismatches the request is refused rather than mislabeled
 - CLI: `fetch-gfs-wind --forecast-hours 0,1,6`, `gfs-wind-synthetic`
 
+NOAA OFS surface currents converge on `CurrentField` via **keyless CO-OPS THREDDS OPeNDAP subsetting** (`src/currents/ofs_thredds.py`):
+
+- `fetch_ofs_thredds(ofs_code, bbox, start, end, cadence_hours=6, prefer="nowcast", timeout=120.0)` pulls `u_eastward`/`v_northward` (m/s) + `temp` (°C) surface fields for 12 OFS models (SSCOFS, CBOFS, WCOFS, NGOFS2, GOMOFS, DBOFS, SFBOFS, LEOFS, LMHOFS, LOOFS, LSOFS, CIOFS — verified live 2026-10-01) with the bbox subset **server-side**: one binary `.dods` request per hourly step, parsed with a DDS-driven XDR decoder (stdlib only). `source="ofs-thredds/<CODE>"`, per-step provenance records the exact OPeNDAP URLs, land cells are NaN
+- Filename→valid-time rules verified live 2026-10-01 (forecast `f{HHH}` = cycle+HHH; nowcast `n{HHH}` = cycle−span+HHH with per-model span calibrated from the file's own `time`, 6 h for most models, 24 h for WCOFS); each served step's valid time is cross-checked against the requested hour and refused if mismatched — never mislabeled
+- **Honesty contract:** THREDDS keeps roughly the last **31 days** of OFS output (verified live 2026-10-01) — dates outside the window and hours with no matching file raise `UnavailableRangeError` naming the exact URL, never silent padding. **Honest download cost:** measured live 2026-10-01, a Puget Sound bbox (240×201 grid) is 579,229 bytes/step vs ~65 MB for the full field file (~120× smaller); the caller owns the frame budget
+- CLI: `fetch-ofs-thredds --ofs SSCOFS --bbox … --start … --end … [--cadence-hours 6] [--prefer nowcast]`
+
 ## Interoperability
 
 - **survey-monitor**: `CurrentsPassProvider` in `currents/interop.py` implements the `PassProvider` interface (`list_passes`/`metrics`) — each forecast hour becomes a monitored pass with `speed_mean`/`u_mean`/`v_mean`/`temp_mean` metrics.
@@ -287,6 +295,7 @@ src/currents/
     oceancolor.py  # NOAA CoastWatch ERDDAP + NASA OBPG ocean color (chlorophyll-a) -> OceanColorField
     earthquakes.py # USGS ComCat FDSN event service (keyless GeoJSON) -> QuakeField
     gfs_wind.py    # NOAA GFS 10-m winds + 2-m air temp via keyless NOMADS GRIB filter -> GfsWindField
+    ofs_thredds.py # NOAA OFS surface currents + water temp via keyless CO-OPS THREDDS OPeNDAP subsetting -> CurrentField
     cmems.py       # copernicusmarine subset wrapper + parser
     convert.py     # per-timestep 4-band GeoTIFF/COG export
     provenance.py  # SHA-256 provenance sidecars

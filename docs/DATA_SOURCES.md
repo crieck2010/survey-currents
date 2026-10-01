@@ -706,6 +706,32 @@ not just the f000 analysis.
 | CLI | `fetch-gfs-wind --bbox … --start … --end … [--stride-days 1] [--cycle 00] [--forecast-hours 0] [--work-dir …] [--out …]`, `gfs-wind-synthetic` |
 | Interop | Consumed by the `gfs-wind` source in reel-studio (`wind` variable, keyless); survey-viz's `dark_strands`/`dark_flow` presets read `grids["u10"]`/`grids["v10"]` and color wind strands by `air_temperature` (°F) |
 
+## 19. NOAA OFS via CO-OPS THREDDS OPeNDAP — surface currents + water temperature (no account)
+
+The NOAA Operational Forecast Systems (the same models behind `noaa_ofs.py`)
+served by the CO-OPS THREDDS Data Server with **OPeNDAP constraint
+queries — keyless HTTPS, no account, no token**. The direct S3 full-file
+OFS path is dead for reel work (hourly field files are 62–70 MB each);
+the `regulargrid` NetCDFs are the same model output, and a surface-u/v
+(+ temperature) subset for a small bbox is kilobytes instead of
+megabytes. This is the keyless OFS path for unattended automation.
+
+| Item | Value |
+|---|---|
+| Endpoint | `https://opendap.co-ops.nos.noaa.gov/thredds/dodsC/NOAA/<MODEL>/MODELS/<yyyy>/<mm>/<dd>/<file>.nc.dods?<constraint>`; catalogs at `/thredds/catalog/NOAA/<MODEL>/MODELS/<yyyy>/<mm>/<dd>/catalog.xml` |
+| Access | Keyless HTTPS. Live-verified 2026-10-01: catalogs, `.dds`/`.das`/`.ascii`/`.dods` all HTTP 200 with no credentials |
+| Models | 12 of 15 OFS models serve per-hour `regulargrid` files with the `u_eastward`/`v_northward`/`temp` schema (verified live 2026-10-01): SSCOFS, CBOFS, WCOFS, NGOFS2, GOMOFS, DBOFS, SFBOFS, LEOFS, LMHOFS, LOOFS, LSOFS, CIOFS. NYOFS/SJROFS have no `regulargrid` files; TBOFS is stale (2021) |
+| Files | One timestep per file: `<code>.t<CC>z.<yyyymmdd>.regulargrid.[n\|f]<HHH>.nc`. Forecast `f{HHH}` valid at `cycle + HHH` h; nowcast `n{HHH}` valid at `cycle − span + HHH` h where `span` is calibrated per model by probing one nowcast file's own `time` (6 h for most models, 24 h for WCOFS — all verified live 2026-10-01). The valid time read back from each fetched file is cross-checked against the requested hour; a mismatch is refused, never mislabeled |
+| Variables | `u_eastward`/`v_northward` (m s⁻¹), `temp` (°C, "potential temperature"), `Depth[0]` = 0.0 m surface (verified 2026-10-01); `time` in "seconds since …" (epoch differs per model — parsed from the DAS). Land cells carry `_FillValue` (−99999.0) and are returned as NaN |
+| Grid | Regular lat/lon stored as 2-D `Latitude`/`Longitude` (verified row/column-constant per model at fetch time; a non-regular grid raises `ValueError`). E.g. SSCOFS: 1553×1519 at 0.005° (44.37…52.13°N, 129.53…121.94°W); CBOFS: 693×509; WCOFS: 935×833 |
+| Subsetting | DAP2 constraint expressions on the binary `.dods` response, parsed with a DDS-driven XDR decoder (stdlib `struct` — the server reorders coordinate variables first, so the parser follows the response DDS, not the request order). Grid vectors come from tiny `.ascii` probes |
+| Retention | ~31 days (`THREDDS_RETENTION_DAYS`, verified 2026-10-01). A date with no day catalog, or an hour with no matching file, raises `UnavailableRangeError` naming the exact URL — never silent, never padded |
+| Per-step size | Measured live 2026-10-01: Puget Sound bbox (−123.2, 47.2, −122.2, 48.4; 240×201 grid) = **579,229 bytes** for u+v+temp+time in one `.dods` response, vs ~65 MB for the full field file (~120× smaller). Each requested hour is one such request — the caller owns the frame budget |
+| Query | `fetch_ofs_thredds(ofs_code, bbox, start, end, cadence_hours=6, prefer="nowcast", timeout=120.0)`; `source="ofs-thredds/<CODE>"` |
+| Model | Canonical `CurrentField` (`u`/`v` in m/s, `temperature` in °C, `times` ISO-8601 UTC, `forecast_hours` signed offsets from cycle, per-step provenance with exact OPeNDAP URLs, `water_fraction`) |
+| CLI | `fetch-ofs-thredds --ofs SSCOFS --bbox … --start … --end … [--cadence-hours 6] [--prefer nowcast] [--out …]` |
+| Interop | Consumed by the proposed `ofs-thredds` source in reel-studio (`currents` variable, keyless); survey-viz's `dark_flow` preset reads `field.u`/`field.v` and colors by water temperature (°F) — the mapped.earth Puget Sound encoding |
+
 ## Choosing a source
 
 - **US Great Lakes / coasts, no signup:** NOAA OFS (LMHOFS for Lake

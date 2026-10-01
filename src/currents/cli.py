@@ -48,6 +48,20 @@ def cmd_fetch_noaa(a: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_fetch_ofs_thredds(a: argparse.Namespace) -> int:
+    from .ofs_thredds import fetch_ofs_thredds
+    field = fetch_ofs_thredds(a.ofs, _parse_bbox(a.bbox), a.start, a.end,
+                              cadence_hours=a.cadence_hours, prefer=a.prefer)
+    out_json = f"{a.out.rstrip('/')}.json"
+    field.to_json(out_json)
+    print(f"fetched {len(field.times)} timesteps -> {out_json}")
+    print(f"source={field.source} model_run={field.model_run} "
+          f"bounds={field.bounds}")
+    print(f"bytes={field.provenance.get('n_bytes', '?')} "
+          f"water_fraction={field.provenance.get('water_fraction', '?'):.3f}")
+    return 0
+
+
 def cmd_fetch_cmems(a: argparse.Namespace) -> int:
     from .cmems import parse_cmems_netcdf, subset_cmems
     path = subset_cmems(a.preset, _parse_bbox(a.bbox), a.start, a.end, a.out)
@@ -565,6 +579,26 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--bbox", default=None, help="min_lon,min_lat,max_lon,max_lat")
     s.add_argument("--out", default="currents_data", help="work directory")
     s.set_defaults(func=cmd_fetch_noaa)
+
+    s = sub.add_parser("fetch-ofs-thredds",
+                       help="fetch NOAA OFS surface currents via CO-OPS "
+                            "THREDDS OPeNDAP subsetting (needs network; "
+                            "keyless)")
+    s.add_argument("--ofs", required=True,
+                   help="OFS code, e.g. SSCOFS (12 models serve regulargrid)")
+    s.add_argument("--bbox", required=True,
+                   help="min_lon,min_lat,max_lon,max_lat (subset server-side)")
+    s.add_argument("--start", required=True, help="ISO start datetime (hourly)")
+    s.add_argument("--end", required=True,
+                   help="ISO end datetime, inclusive (hourly)")
+    s.add_argument("--cadence-hours", type=int, default=6,
+                   help="timestep spacing in hours (default: 6)")
+    s.add_argument("--prefer", default="nowcast",
+                   choices=("nowcast", "forecast"),
+                   help="prefer nowcast or forecast files on overlap "
+                        "(default: nowcast)")
+    s.add_argument("--out", default="ofs_thredds", help="output path prefix")
+    s.set_defaults(func=cmd_fetch_ofs_thredds)
 
     s = sub.add_parser("fetch-cmems", help="fetch CMEMS subset (needs account + network)")
     s.add_argument("--preset", default="global-physics-daily")
